@@ -1,2 +1,4 @@
 discord.py==2.0.0
-yt-dlp==2022.01.01
+yt-dlp==2023.11.19.232727.dev0
+discord-py-interactions
+pynacl
