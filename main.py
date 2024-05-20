@@ -88,30 +88,31 @@ class MusicBot(commands.Cog):
             await vc.move_to(channel)
         return vc
 
-    async def get_audio_url(self, url: str):
-        ydl_opts = {
-            'format': 'bestaudio/best',
-            'quiet': True,
-            'no_warnings': True,
-            'default_search': 'ytsearch',
-            'noplaylist': True,
-            'extract_flat': 'in_playlist',
-            'source_address': '0.0.0.0',  # bind to ipv4 since ipv6 addresses cause issues sometimes
-            'socket_timeout': 10,  # set a timeout for socket connections
-            'retries': 3,  # number of retries in case of failure
-            'ffmpeg_location': '/usr/bin/ffmpeg',  # specify path to your FFmpeg binary
-            'nocheckcertificate': True  # ignore certificate errors (use with caution)
-        }
+async def get_audio_url(self, url: str):
+    ydl_opts = {
+        'format': 'bestaudio/best',
+        'quiet': True,
+        'no_warnings': True,
+        'default_search': 'ytsearch',
+        'noplaylist': True,
+        'extract_flat': 'in_playlist',
+        'source_address': '0.0.0.0',  # bind to ipv4 since ipv6 addresses cause issues sometimes
+        'socket_timeout': 10,  # set a timeout for socket connections
+        'retries': 3,  # number of retries in case of failure
+        'ffmpeg_location': 'ffmpeg',  # specify path to your FFmpeg binary
+        'nocheckcertificate': True  # ignore certificate errors (use with caution)
+    }
 
-        try:
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info = ydl.extract_info(url, download=False)
-                if 'entries' in info:
-                    info = info['entries'][0]
-                return info['url']
-        except yt_dlp.DownloadError as e:
-            print(f"Download error: {e}")
-            return None
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=False)
+            if 'entries' in info:
+                info = info['entries'][0]
+            return info['url']
+    except yt_dlp.DownloadError as e:
+        print(f"Download error: {e}")
+        return None
+
 
     @app_commands.command(name="suggest", description="Get suggestions")
     async def suggest_command(self, ctx):
