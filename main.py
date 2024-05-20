@@ -8,9 +8,10 @@ import yt_dlp
 import os
 
 # Load environment variables from .env file
+from dotenv import load_dotenv
+load_dotenv()
 
 DISCORD_BOT_TOKEN = os.getenv('DISCORD_BOT_TOKEN')
-
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -98,7 +99,7 @@ class MusicBot(commands.Cog):
             'source_address': '0.0.0.0',  # bind to ipv4 since ipv6 addresses cause issues sometimes
             'socket_timeout': 10,  # set a timeout for socket connections
             'retries': 3,  # number of retries in case of failure
-            'ffmpeg_location': 'path/to/ffmpeg',  # specify path to your FFmpeg binary
+            'ffmpeg_location': '/usr/bin/ffmpeg',  # specify path to your FFmpeg binary
             'nocheckcertificate': True  # ignore certificate errors (use with caution)
         }
 
@@ -111,7 +112,6 @@ class MusicBot(commands.Cog):
         except yt_dlp.DownloadError as e:
             print(f"Download error: {e}")
             return None
-
 
     @app_commands.command(name="suggest", description="Get suggestions")
     async def suggest_command(self, ctx):
@@ -270,13 +270,11 @@ async def on_command_error(ctx, error):
 async def on_error(event, *args, **kwargs):
     print(f"Error in event {event}: {args[0]}")
 
-
 async def main():
     async with bot:
         await setup()
         await bot.start(DISCORD_BOT_TOKEN)
 
 asyncio.run(main())
-
 
 bot.run(DISCORD_BOT_TOKEN)
