@@ -119,25 +119,89 @@ class MusicBot(commands.Cog):
         view = ScrollableSuggestions(suggestions)
         await ctx.send("Here are your suggestions:", view=view)
 
-    @app_commands.command(name="play", description="Play music from a URL or resume the current music")
-    async def play(self, interaction: discord.Interaction, url: str = None):
-        vc = await self.join_channel(interaction)
-        if vc is None:
-            return
 
-        if url:
-            vc.stop()
-            audio_url = await self.get_audio_url(url)
-            if audio_url:
-                vc.play(discord.FFmpegPCMAudio(executable="ffmpeg", source=audio_url))
-                while vc.is_playing():
-                    await asyncio.sleep(1)
-                await interaction.response.send_message(f"Finished playing: {url}")
-            else:
-                await interaction.response.send_message(f"Failed to retrieve audio from URL: {url}")
+
+
+
+    
+class StopButton(View):
+    def __init__(self, vc):
+        super().__init__()
+        self.vc = vc
+        self.add_item(Button(label="Stop", style=discord.ButtonStyle.danger, custom_id="stop"))
+
+    @discord.ui.button(label="Stop", style=discord.ButtonStyle.danger)
+    async def stop_button_callback(self, button: Button, interaction: discord.Interaction):
+        self.vc.stop()
+        await interaction.response.send_message("Stopped the music.", ephemeral=True)
+
+@app_commands.command(name="play", description="Play music from a URL or resume the current music")
+async def play(self, interaction: discord.Interaction, url: str = None):
+    vc = await self.join_channel(interaction)
+    if vc is None:
+        return
+
+    if url:
+        vc.stop()
+        audio_info = await self.get_audio_info(url)
+        if audio_info:
+            audio_url = audio_info['url']
+            title = audio_info['title']
+            duration = audio_info['duration']
+            vc.play(discord.FFmpegPCMAudio(executable="ffmpeg", source=audio_url))
+
+            embed = discord.Embed(
+                title="Now Playing",
+                description=f"[{title}]({url})",
+                color=discord.Color.blue()
+            )
+            embed.add_field(name="Duration", value=str(duration))
+            message = await interaction.response.send_message(embed=embed, view=StopButton(vc))
+
+            while vc.is_playing():
+                elapsed_time = vc.source.read_position // 1000  # in seconds
+                progress_bar = self.get_progress_bar(elapsed_time, duration)
+                embed.set_field_at(1, name="Progress", value=progress_bar)
+                await message.edit(embed=embed)
+                await asyncio.sleep(1)
         else:
-            vc.resume()
-            await interaction.response.send_message("Resumed the music.")
+            await interaction.response.send_message(f"Failed to retrieve audio from URL: {url}")
+    else:
+        vc.resume()
+        await interaction.response.send_message("Resumed the music.")
+
+async def get_audio_info(self, url: str):
+    ydl_opts = {
+        'format': 'bestaudio/best',
+        'quiet': True,
+        'no_warnings': True,
+        'default_search': 'ytsearch',
+        'noplaylist': True,
+        'extract_flat': 'in_playlist',
+        'source_address': '0.0.0.0',  # bind to ipv4 since ipv6 addresses cause issues sometimes
+        'socket_timeout': 10,  # set a timeout for socket connections
+        'retries': 3,  # number of retries in case of failure
+        'ffmpeg_location': '/usr/bin/ffmpeg',  # specify path to your FFmpeg binary
+        'nocheckcertificate': True  # ignore certificate errors (use with caution)
+    }
+
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=False)
+            if 'entries' in info:
+                info = info['entries'][0]
+            return {
+                'url': info['url'],
+                'title': info['title'],
+                'duration': info.get('duration', 0)
+            }
+    except yt_dlp.DownloadError as e:
+        print(f"Download error: {e}")
+        return None
+
+def get_progress_bar(self, elapsed, total, length=20):
+    progress = int(length * elapsed // total)
+    return f"[{'#' * progress}{'-' * (length - progress)}] {elapsed}/{total}s"
 
     @app_commands.command(name="play_p", description="Play your playlist")
     async def play_p(self, interaction: discord.Interaction):
