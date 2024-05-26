@@ -4,6 +4,9 @@ from discord import app_commands
 import asyncio
 import yt_dlp
 import os
+from dotenv import load_dotenv
+
+load_dotenv()  # Load environment variables from .env file
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -54,19 +57,20 @@ class MusicBot(commands.Cog):
     @app_commands.command(name="play", description="Play a song")
     @app_commands.describe(url="The URL of the song to play")
     async def play(self, interaction: discord.Interaction, url: str):
+        await interaction.response.defer()  # Acknowledge the interaction immediately
         vc = await self.join_channel(interaction)
         if vc is None:
             return
         filename = download_audio(url)
         if filename is None:
-            await interaction.response.send_message(f"Failed to download audio from {url}")
+            await interaction.followup.send(f"Failed to download audio from {url}")
             return
         vc.play(discord.FFmpegPCMAudio(executable="ffmpeg", source=filename))
         user_id = interaction.user.id
         if user_id not in user_playlists:
             user_playlists[user_id] = []
         user_playlists[user_id].append(url)
-        await interaction.response.send_message("Playing song and added to your playlist.")
+        await interaction.followup.send("Playing song and added to your playlist.")
 
     @app_commands.command(name="pause", description="Pause the current song")
     async def pause(self, interaction: discord.Interaction):
@@ -93,16 +97,6 @@ class MusicBot(commands.Cog):
             await interaction.response.send_message("Left the voice channel.")
         else:
             await interaction.response.send_message("I am not in a voice channel.")
-
-    async def get_video_info(self, url):
-        ydl_opts = {
-            'format': 'best',
-            'quiet': True,
-            'extract_flat': True,
-        }
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info_dict = ydl.extract_info(url, download=False)
-            return info_dict
 
 @bot.event
 async def on_ready():
