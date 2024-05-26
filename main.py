@@ -70,6 +70,7 @@ class MusicBot(commands.Cog):
     @app_commands.command(name="play", description="Play a song")
     @app_commands.describe(url="The URL of the song to play")
     async def play(self, interaction: discord.Interaction, url: str):
+        await interaction.response.defer()  # Defer the response to avoid the interaction timeout
         vc = await self.join_channel(interaction)
         if vc is None:
             return
@@ -83,7 +84,7 @@ class MusicBot(commands.Cog):
         if not vc.is_playing():
             await self.play_next(guild_id)
         
-        await interaction.response.send_message("Added song to the queue and will play it soon.")
+        await interaction.followup.send("Added song to the queue and will play it soon.")
 
     @app_commands.command(name="pause", description="Pause the current song")
     async def pause(self, interaction: discord.Interaction):
@@ -102,6 +103,31 @@ class MusicBot(commands.Cog):
             return
         vc.resume()
         await interaction.response.send_message("Resumed the song.")
+
+    @app_commands.command(name="skip", description="Skip the current song")
+    async def skip(self, interaction: discord.Interaction):
+        vc = interaction.guild.voice_client
+        if vc is None or not vc.is_playing():
+            await interaction.response.send_message("There is no song currently playing.")
+            return
+        vc.stop()
+        await interaction.response.send_message("Skipped the current song.")
+
+    @app_commands.command(name="queue", description="Show the current queue")
+    async def queue(self, interaction: discord.Interaction):
+        guild_id = interaction.guild.id
+        if guild_id not in guild_queues or not guild_queues[guild_id]:
+            await interaction.response.send_message("The queue is empty.")
+            return
+        queue_list = "\n".join(guild_queues[guild_id])
+        await interaction.response.send_message(f"Current queue:\n{queue_list}")
+
+    @app_commands.command(name="clear", description="Clear the queue")
+    async def clear(self, interaction: discord.Interaction):
+        guild_id = interaction.guild.id
+        if guild_id in guild_queues:
+            guild_queues[guild_id].clear()
+        await interaction.response.send_message("Cleared the queue.")
 
     @app_commands.command(name="leave", description="Leave the voice channel")
     async def leave(self, interaction: discord.Interaction):
