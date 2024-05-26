@@ -4,6 +4,7 @@ from discord import app_commands
 import asyncio
 import yt_dlp
 import os
+import concurrent.futures
 from dotenv import load_dotenv
 
 load_dotenv()  # Load environment variables from .env file
@@ -61,21 +62,26 @@ class MusicBot(commands.Cog):
                 return
 
             url = guild_queues[guild_id].pop(0)
-            filename = download_audio(url)
-            if filename is None:
-                await self.bot.get_guild(guild_id).text_channels[0].send(f"Failed to download audio from {url}")
-                return
+            loop = asyncio.get_event_loop()
 
-            def after_playing(error):
-                if error:
-                    print(f"Error occurred: {error}")
-                fut = asyncio.run_coroutine_threadsafe(self.play_next(guild_id), self.bot.loop)
-                try:
-                    fut.result()
-                except Exception as e:
-                    print(f"Error in play_next: {e}")
+            try:
+                filename = await loop.run_in_executor(None, download_audio, url)
+                if filename is None:
+                    await self.bot.get_guild(guild_id).text_channels[0].send(f"Failed to download audio from {url}")
+                    return
 
-            vc.play(discord.FFmpegPCMAudio(executable="ffmpeg", source=filename), after=after_playing)
+                def after_playing(error):
+                    if error:
+                        print(f"Error occurred: {error}")
+                    fut = asyncio.run_coroutine_threadsafe(self.play_next(guild_id), self.bot.loop)
+                    try:
+                        fut.result()
+                    except Exception as e:
+                        print(f"Error in play_next: {e}")
+
+                vc.play(discord.FFmpegPCMAudio(executable="ffmpeg", source=filename), after=after_playing)
+            except Exception as e:
+                print(f"Error in play_next: {e}")
 
     @app_commands.command(name="play", description="Play a song")
     @app_commands.describe(url="The URL of the song to play")
