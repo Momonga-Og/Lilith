@@ -14,8 +14,8 @@ intents.message_content = True
 bot = commands.Bot(command_prefix='!', intents=intents)
 tree = bot.tree
 
-# Dictionary to hold user playlists
-user_playlists = {}
+# Dictionary to hold guild queues
+guild_queues = {}
 
 # Function to download YouTube audio
 def download_audio(url):
@@ -40,7 +40,6 @@ def download_audio(url):
 class MusicBot(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.voice_clients = {}
 
     async def join_channel(self, interaction: discord.Interaction):
         if interaction.user.voice is None:
@@ -54,6 +53,20 @@ class MusicBot(commands.Cog):
             await vc.move_to(channel)
         return vc
 
+    async def play_next(self, guild_id):
+        if guild_id in guild_queues and guild_queues[guild_id]:
+            vc = self.bot.get_guild(guild_id).voice_client
+            if vc is None:
+                return
+
+            url = guild_queues[guild_id].pop(0)
+            filename = download_audio(url)
+            if filename is None:
+                await self.bot.get_guild(guild_id).text_channels[0].send(f"Failed to download audio from {url}")
+                return
+
+            vc.play(discord.FFmpegPCMAudio(executable="ffmpeg", source=filename), after=lambda e: asyncio.run_coroutine_threadsafe(self.play_next(guild_id), self.bot.loop))
+
     @app_commands.command(name="play", description="Play a song")
     @app_commands.describe(url="The URL of the song to play")
     async def play(self, interaction: discord.Interaction, url: str):
@@ -61,16 +74,17 @@ class MusicBot(commands.Cog):
         vc = await self.join_channel(interaction)
         if vc is None:
             return
-        filename = download_audio(url)
-        if filename is None:
-            await interaction.followup.send(f"Failed to download audio from {url}")
-            return
-        vc.play(discord.FFmpegPCMAudio(executable="ffmpeg", source=filename))
-        user_id = interaction.user.id
-        if user_id not in user_playlists:
-            user_playlists[user_id] = []
-        user_playlists[user_id].append(url)
-        await interaction.followup.send("Playing song and added to your playlist.")
+        
+        guild_id = interaction.guild.id
+        if guild_id not in guild_queues:
+            guild_queues[guild_id] = []
+        
+        guild_queues[guild_id].append(url)
+        
+        if not vc.is_playing():
+            await self.play_next(guild_id)
+        
+        await interaction.followup.send("Added song to the queue and will play it soon.")
 
     @app_commands.command(name="pause", description="Pause the current song")
     async def pause(self, interaction: discord.Interaction):
@@ -94,41 +108,12 @@ class MusicBot(commands.Cog):
     async def leave(self, interaction: discord.Interaction):
         if interaction.guild.voice_client is not None:
             await interaction.guild.voice_client.disconnect()
+            guild_id = interaction.guild.id
+            if guild_id in guild_queues:
+                guild_queues.pop(guild_id)
             await interaction.response.send_message("Left the voice channel.")
         else:
             await interaction.response.send_message("I am not in a voice channel.")
-
-    @commands.Cog.listener()
-    async def on_voice_state_update(self, member, before, after):
-        # Handle voice state updates to manage disconnections
-        if before.channel is None and after.channel is not None:
-            print(f"{member} joined a voice channel.")
-        elif before.channel is not None and after.channel is None:
-            print(f"{member} left a voice channel.")
-        elif before.channel != after.channel:
-            print(f"{member} moved from {before.channel} to {after.channel}.")
-
-    @commands.Cog.listener()
-    async def on_disconnect(self):
-        # Handle bot disconnection from voice channels
-        for vc in self.voice_clients.values():
-            if vc.is_connected():
-                try:
-                    await vc.disconnect()
-                except Exception as e:
-                    print(f"Error while disconnecting: {e}")
-
-    @commands.Cog.listener()
-    async def on_resumed(self):
-        # Handle reconnection logic
-        print("Bot reconnected. Attempting to rejoin voice channels.")
-        for guild_id, vc in self.voice_clients.items():
-            if not vc.is_connected():
-                try:
-                    channel = vc.channel
-                    await channel.connect()
-                except Exception as e:
-                    print(f"Error while reconnecting: {e}")
 
 @bot.event
 async def on_ready():
