@@ -138,7 +138,4 @@ async def on_ready():
     print(f'Logged in as {bot.user}!')
 
 # Run the bot with the token from the environment variable
- wait :
-discord.getway (Surpass . 10 discord.getway )
-else discord.getway (surpass . 20 discord.getway )
 bot.run(os.getenv('DISCORD_BOT_TOKEN'))
