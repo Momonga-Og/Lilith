@@ -56,7 +56,8 @@ class MusicBot(commands.Cog):
     async def play_next(self, guild_id):
         if guild_id in guild_queues and guild_queues[guild_id]:
             vc = self.bot.get_guild(guild_id).voice_client
-            if vc is None:
+            if vc is None or not vc.is_connected():
+                print(f"Voice client is not connected for guild {guild_id}")
                 return
 
             url = guild_queues[guild_id].pop(0)
@@ -65,7 +66,16 @@ class MusicBot(commands.Cog):
                 await self.bot.get_guild(guild_id).text_channels[0].send(f"Failed to download audio from {url}")
                 return
 
-            vc.play(discord.FFmpegPCMAudio(executable="ffmpeg", source=filename), after=lambda e: asyncio.run_coroutine_threadsafe(self.play_next(guild_id), self.bot.loop))
+            def after_playing(error):
+                if error:
+                    print(f"Error occurred: {error}")
+                fut = asyncio.run_coroutine_threadsafe(self.play_next(guild_id), self.bot.loop)
+                try:
+                    fut.result()
+                except Exception as e:
+                    print(f"Error in play_next: {e}")
+
+            vc.play(discord.FFmpegPCMAudio(executable="ffmpeg", source=filename), after=after_playing)
 
     @app_commands.command(name="play", description="Play a song")
     @app_commands.describe(url="The URL of the song to play")
