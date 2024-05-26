@@ -1,17 +1,9 @@
 import discord
 from discord.ext import commands
 from discord import app_commands
-from discord.ui import View, Button
 import asyncio
-import json
 import yt_dlp
 import os
-
-# Load environment variables from .env file
-from dotenv import load_dotenv
-load_dotenv()
-
-DISCORD_BOT_TOKEN = os.getenv('DISCORD_BOT_TOKEN')
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -22,59 +14,30 @@ tree = bot.tree
 # Dictionary to hold user playlists
 user_playlists = {}
 
-# Log file to store user playlists
-log_file = 'user_playlists.json'
-
-# Load user playlists from the log file
-def load_playlists():
-    global user_playlists
+# Function to download YouTube audio
+def download_audio(url):
+    ydl_opts = {
+        'format': 'bestaudio/best',
+        'outtmpl': 'downloads/%(id)s.%(ext)s',
+        'postprocessors': [{
+            'key': 'FFmpegExtractAudio',
+            'preferredcodec': 'mp3',
+            'preferredquality': '192',
+        }],
+    }
     try:
-        with open(log_file, 'r') as file:
-            user_playlists = json.load(file)
-    except FileNotFoundError:
-        user_playlists = {}
-
-
-# Save user playlists to the log file
-def save_playlists():
-    with open(log_file, 'w') as file:
-        json.dump(user_playlists, file)
-
-class ScrollableSuggestions(View):
-    def __init__(self, suggestions):
-        super().__init__()
-        self.suggestions = suggestions
-        self.page = 0
-        self.max_page = (len(suggestions) - 1) // 5
-
-        self.update_buttons()
-
-    def update_buttons(self):
-        self.clear_items()
-
-        for suggestion in self.suggestions[self.page * 5:(self.page + 1) * 5]:
-            self.add_item(Button(label=suggestion, style=discord.ButtonStyle.secondary))
-
-        if self.page > 0:
-            self.add_item(Button(label="Previous", style=discord.ButtonStyle.primary, custom_id="prev"))
-
-        if self.page < self.max_page:
-            self.add_item(Button(label="Next", style=discord.ButtonStyle.primary, custom_id="next"))
-
-    async def interaction_check(self, interaction: discord.Interaction):
-        if interaction.data["custom_id"] == "prev":
-            self.page -= 1
-        elif interaction.data["custom_id"] == "next":
-            self.page += 1
-
-        self.update_buttons()
-        await interaction.response.edit_message(view=self)
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=True)
+            filename = ydl.prepare_filename(info).replace('.webm', '.mp3').replace('.m4a', '.mp3')
+            return filename
+    except Exception as e:
+        print(f"An error occurred: {e}")
+        return None
 
 class MusicBot(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.voice_clients = {}
-        load_playlists()
 
     async def join_channel(self, interaction: discord.Interaction):
         if interaction.user.voice is None:
@@ -88,222 +51,40 @@ class MusicBot(commands.Cog):
             await vc.move_to(channel)
         return vc
 
-    async def get_audio_url(self, url: str):
-        ydl_opts = {
-            'format': 'bestaudio/best',
-            'quiet': True,
-            'no_warnings': True,
-            'default_search': 'ytsearch',
-            'noplaylist': True,
-            'extract_flat': 'in_playlist',
-            'source_address': '0.0.0.0',  # bind to ipv4 since ipv6 addresses cause issues sometimes
-            'socket_timeout': 10,  # set a timeout for socket connections
-            'retries': 3,  # number of retries in case of failure
-            'ffmpeg_location': '/usr/bin/ffmpeg',  # specify path to your FFmpeg binary
-            'nocheckcertificate': True  # ignore certificate errors (use with caution)
-        }
-
-        try:
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info = ydl.extract_info(url, download=False)
-                if 'entries' in info:
-                    info = info['entries'][0]
-                return info['url']
-        except yt_dlp.DownloadError as e:
-            print(f"Download error: {e}")
-            return None
-
-    @app_commands.command(name="suggest", description="Get suggestions")
-    async def suggest_command(self, ctx):
-        suggestions = ["suggestion1", "suggestion2", "suggestion3", "suggestion4", "suggestion5", "suggestion6", "suggestion7", "suggestion8", "suggestion9", "suggestion10"]
-        view = ScrollableSuggestions(suggestions)
-        await ctx.send("Here are your suggestions:", view=view)
-
-
-
-
-
-    
-class StopButton(View):
-    def __init__(self, vc):
-        super().__init__()
-        self.vc = vc
-        self.add_item(Button(label="Stop", style=discord.ButtonStyle.danger, custom_id="stop"))
-
-    @discord.ui.button(label="Stop", style=discord.ButtonStyle.danger)
-    async def stop_button_callback(self, button: Button, interaction: discord.Interaction):
-        self.vc.stop()
-        await interaction.response.send_message("Stopped the music.", ephemeral=True)
-
-@app_commands.command(name="play", description="Play music from a URL or resume the current music")
-async def play(self, interaction: discord.Interaction, url: str = None):
-    vc = await self.join_channel(interaction)
-    if vc is None:
-        return
-
-    if url:
-        vc.stop()
-        audio_info = await self.get_audio_info(url)
-        if audio_info:
-            audio_url = audio_info['url']
-            title = audio_info['title']
-            duration = audio_info['duration']
-            vc.play(discord.FFmpegPCMAudio(executable="ffmpeg", source=audio_url))
-
-            embed = discord.Embed(
-                title="Now Playing",
-                description=f"[{title}]({url})",
-                color=discord.Color.blue()
-            )
-            embed.add_field(name="Duration", value=str(duration))
-            message = await interaction.response.send_message(embed=embed, view=StopButton(vc))
-
-            while vc.is_playing():
-                elapsed_time = vc.source.read_position // 1000  # in seconds
-                progress_bar = self.get_progress_bar(elapsed_time, duration)
-                embed.set_field_at(1, name="Progress", value=progress_bar)
-                await message.edit(embed=embed)
-                await asyncio.sleep(1)
-        else:
-            await interaction.response.send_message(f"Failed to retrieve audio from URL: {url}")
-    else:
-        vc.resume()
-        await interaction.response.send_message("Resumed the music.")
-
-async def get_audio_info(self, url: str):
-    ydl_opts = {
-        'format': 'bestaudio/best',
-        'quiet': True,
-        'no_warnings': True,
-        'default_search': 'ytsearch',
-        'noplaylist': True,
-        'extract_flat': 'in_playlist',
-        'source_address': '0.0.0.0',  # bind to ipv4 since ipv6 addresses cause issues sometimes
-        'socket_timeout': 10,  # set a timeout for socket connections
-        'retries': 3,  # number of retries in case of failure
-        'ffmpeg_location': '/usr/bin/ffmpeg',  # specify path to your FFmpeg binary
-        'nocheckcertificate': True  # ignore certificate errors (use with caution)
-    }
-
-    try:
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=False)
-            if 'entries' in info:
-                info = info['entries'][0]
-            return {
-                'url': info['url'],
-                'title': info['title'],
-                'duration': info.get('duration', 0)
-            }
-    except yt_dlp.DownloadError as e:
-        print(f"Download error: {e}")
-        return None
-
-def get_progress_bar(self, elapsed, total, length=20):
-    progress = int(length * elapsed // total)
-    return f"[{'#' * progress}{'-' * (length - progress)}] {elapsed}/{total}s"
-
-    @app_commands.command(name="play_p", description="Play your playlist")
-    async def play_p(self, interaction: discord.Interaction):
-        await interaction.response.defer()  # Acknowledge the interaction to avoid timeout
-
-        user_id = interaction.user.id
-        if user_id not in user_playlists or not user_playlists[user_id]:
-            await interaction.followup.send("Your playlist is empty.")
-            return
-
+    @app_commands.command(name="play", description="Play a song")
+    @app_commands.describe(url="The URL of the song to play")
+    async def play(self, interaction: discord.Interaction, url: str):
         vc = await self.join_channel(interaction)
         if vc is None:
             return
-
-        for url in user_playlists[user_id]:
-            vc.stop()
-            audio_url = await self.get_audio_url(url)
-            if audio_url:
-                vc.play(discord.FFmpegPCMAudio(executable="ffmpeg", source=audio_url))
-                while vc.is_playing():
-                    await asyncio.sleep(1)
-
-        await interaction.followup.send("Finished playing your playlist.")
-
-    @app_commands.command(name="add", description="Add a song to your playlist")
-    @app_commands.describe(url="The URL of the song to add")
-    async def add(self, interaction: discord.Interaction, url: str):
+        filename = download_audio(url)
+        if filename is None:
+            await interaction.response.send_message(f"Failed to download audio from {url}")
+            return
+        vc.play(discord.FFmpegPCMAudio(executable="ffmpeg", source=filename))
         user_id = interaction.user.id
         if user_id not in user_playlists:
             user_playlists[user_id] = []
         user_playlists[user_id].append(url)
-        save_playlists()
-        await interaction.response.send_message(f"Added {url} to your playlist.")
+        await interaction.response.send_message("Playing song and added to your playlist.")
 
-    @app_commands.command(name="showplist", description="Show your playlist")
-    async def show_playlist(self, interaction: discord.Interaction):
-        user_id = interaction.user.id
-        if user_id not in user_playlists or not user_playlists[user_id]:
-            await interaction.response.send_message("Your playlist is empty.")
+    @app_commands.command(name="pause", description="Pause the current song")
+    async def pause(self, interaction: discord.Interaction):
+        vc = interaction.guild.voice_client
+        if vc is None or not vc.is_playing():
+            await interaction.response.send_message("There is no song currently playing.")
             return
+        vc.pause()
+        await interaction.response.send_message("Paused the song.")
 
-        playlist_embed = discord.Embed(
-            title="Your Playlist",
-            description="Here are the tracks in your playlist:",
-            color=discord.Color.blue()
-        )
-
-        for index, url in enumerate(user_playlists[user_id], start=1):
-            playlist_embed.add_field(
-                name=f"Track {index}",
-                value=url,
-                inline=False
-            )
-
-        await interaction.response.send_message(embed=playlist_embed)
-
-    @app_commands.command(name="skip", description="Skip to the next song in the playlist")
-    async def skip(self, interaction: discord.Interaction):
-        vc = interaction.guild.voice_client
-        if vc and vc.is_playing():
-            vc.stop()
-            await interaction.response.send_message("Skipped to the next song.")
-        else:
-            await interaction.response.send_message("No song is currently playing.")
-
-    @app_commands.command(name="stop", description="Stop the music")
-    async def stop(self, interaction: discord.Interaction):
-        vc = interaction.guild.voice_client
-        if vc and vc.is_playing():
-            vc.stop()
-            await interaction.response.send_message("Stopped the music.")
-        else:
-            await interaction.response.send_message("No song is currently playing.")
-
-    @app_commands.command(name="remove", description="Remove a song from your playlist")
-    @app_commands.describe(url="The URL of the song to remove")
-    async def remove(self, interaction: discord.Interaction, url: str):
-        user_id = interaction.user.id
-        if user_id in user_playlists and url in user_playlists[user_id]:
-            user_playlists[user_id].remove(url)
-            save_playlists()
-            await interaction.response.send_message(f"Removed {url} from your playlist.")
-        else:
-            await interaction.response.send_message(f"{url} is not in your playlist.")
-
-    @app_commands.command(name="resume", description="Resume the music")
+    @app_commands.command(name="resume", description="Resume the current song")
     async def resume(self, interaction: discord.Interaction):
         vc = interaction.guild.voice_client
-        if vc and not vc.is_playing():
-            vc.resume()
-            await interaction.response.send_message("Resumed the music.")
-        else:
-            await interaction.response.send_message("No song is currently paused.")
-
-    @app_commands.command(name="join", description="Join a voice channel")
-    async def join(self, interaction: discord.Interaction):
-        vc = await self.join_channel(interaction)
-        if not vc:
-            await interaction.response.send_message("Failed to join the voice channel.")
+        if vc is None or not vc.is_paused():
+            await interaction.response.send_message("There is no song currently paused.")
             return
-
-        await interaction.response.send_message("Joined the voice channel!")
+        vc.resume()
+        await interaction.response.send_message("Resumed the song.")
 
     @app_commands.command(name="leave", description="Leave the voice channel")
     async def leave(self, interaction: discord.Interaction):
@@ -313,32 +94,22 @@ def get_progress_bar(self, elapsed, total, length=20):
         else:
             await interaction.response.send_message("I am not in a voice channel.")
 
-async def setup():
-    await bot.add_cog(MusicBot(bot))
+    async def get_video_info(self, url):
+        ydl_opts = {
+            'format': 'best',
+            'quiet': True,
+            'extract_flat': True,
+        }
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info_dict = ydl.extract_info(url, download=False)
+            return info_dict
 
 @bot.event
 async def on_ready():
+    if not bot.cogs:
+        await bot.add_cog(MusicBot(bot))
+    await tree.sync()
     print(f'Logged in as {bot.user}!')
-    try:
-        await tree.sync()
-    except Exception as e:
-        print(f"Error during sync: {e}")
 
-@bot.event
-async def on_command_error(ctx, error):
-    if isinstance(error, commands.CommandInvokeError):
-        await ctx.send("There was an error trying to execute that command.")
-        print(f"Error during command invocation: {error}")
-
-@bot.event
-async def on_error(event, *args, **kwargs):
-    print(f"Error in event {event}: {args[0]}")
-
-async def main():
-    async with bot:
-        await setup()
-        await bot.start(DISCORD_BOT_TOKEN)
-
-asyncio.run(main())
-
-bot.run(DISCORD_BOT_TOKEN)
+# Token should be stored securely
+bot.run('YOUR_DISCORD_BOT_TOKEN')
