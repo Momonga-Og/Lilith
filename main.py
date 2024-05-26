@@ -111,5 +111,5 @@ async def on_ready():
     await tree.sync()
     print(f'Logged in as {bot.user}!')
 
-# Token should be stored securely
-bot.run('YOUR_DISCORD_BOT_TOKEN')
+# Run the bot with the token from the environment variable
+bot.run(os.getenv('DISCORD_BOT_TOKEN'))
