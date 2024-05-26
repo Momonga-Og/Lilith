@@ -98,6 +98,38 @@ class MusicBot(commands.Cog):
         else:
             await interaction.response.send_message("I am not in a voice channel.")
 
+    @commands.Cog.listener()
+    async def on_voice_state_update(self, member, before, after):
+        # Handle voice state updates to manage disconnections
+        if before.channel is None and after.channel is not None:
+            print(f"{member} joined a voice channel.")
+        elif before.channel is not None and after.channel is None:
+            print(f"{member} left a voice channel.")
+        elif before.channel != after.channel:
+            print(f"{member} moved from {before.channel} to {after.channel}.")
+
+    @commands.Cog.listener()
+    async def on_disconnect(self):
+        # Handle bot disconnection from voice channels
+        for vc in self.voice_clients.values():
+            if vc.is_connected():
+                try:
+                    await vc.disconnect()
+                except Exception as e:
+                    print(f"Error while disconnecting: {e}")
+
+    @commands.Cog.listener()
+    async def on_resumed(self):
+        # Handle reconnection logic
+        print("Bot reconnected. Attempting to rejoin voice channels.")
+        for guild_id, vc in self.voice_clients.items():
+            if not vc.is_connected():
+                try:
+                    channel = vc.channel
+                    await channel.connect()
+                except Exception as e:
+                    print(f"Error while reconnecting: {e}")
+
 @bot.event
 async def on_ready():
     if not bot.cogs:
