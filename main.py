@@ -10,7 +10,7 @@ load_dotenv()  # Load environment variables from .env file
 
 intents = discord.Intents.default()
 intents.message_content = True
-intents.voice_state = True  # Enable voice state intent
+intents.voice_states = True  # Enable voice state intent
 
 bot = commands.Bot(command_prefix='!', intents=intents)
 tree = bot.tree
