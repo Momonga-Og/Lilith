@@ -95,6 +95,8 @@ class MusicBot(commands.Cog):
     @app_commands.command(name="play", description="Play a song")
     @app_commands.describe(url="The URL of the song to play")
     async def play(self, interaction: discord.Interaction, url: str):
+        await interaction.response.defer()  # Defer the response to avoid the interaction timeout
+
         vc = await self.join_channel(interaction)
         if vc is None:
             return
@@ -111,7 +113,7 @@ class MusicBot(commands.Cog):
         if not vc.is_playing():
             await self.play_next(guild_id)
         
-        await interaction.response.send_message("Added song to the queue and will play it soon.")
+        await interaction.followup.send("Added song to the queue and will play it soon.")
 
     @app_commands.command(name="pause", description="Pause the current song")
     async def pause(self, interaction: discord.Interaction):
