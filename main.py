@@ -33,10 +33,11 @@ def download_audio(url):
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=True)
             filename = ydl.prepare_filename(info).replace('.webm', '.mp3').replace('.m4a', '.mp3')
-            return filename
+            duration = info.get('duration', 0)  # Duration in seconds
+            return filename, duration
     except Exception as e:
         print(f"An error occurred: {e}")
-        return None
+        return None, 0
 
 class MusicBot(commands.Cog):
     def __init__(self, bot):
@@ -61,11 +62,11 @@ class MusicBot(commands.Cog):
                 print(f"Voice client is not connected for guild {guild_id}")
                 return
 
-            url = guild_queues[guild_id].pop(0)
+            url, duration = guild_queues[guild_id].pop(0)
             loop = asyncio.get_event_loop()
 
             try:
-                filename = await loop.run_in_executor(None, download_audio, url)
+                filename, duration = await loop.run_in_executor(None, download_audio, url)
                 if filename is None:
                     await self.bot.get_guild(guild_id).text_channels[0].send(f"Failed to download audio from {url}")
                     return
@@ -95,7 +96,7 @@ class MusicBot(commands.Cog):
         if guild_id not in guild_queues:
             guild_queues[guild_id] = []
         
-        guild_queues[guild_id].append(url)
+        guild_queues[guild_id].append((url, 0))  # Placeholder for duration
         
         if not vc.is_playing():
             await self.play_next(guild_id)
@@ -135,7 +136,7 @@ class MusicBot(commands.Cog):
         if guild_id not in guild_queues or not guild_queues[guild_id]:
             await interaction.response.send_message("The queue is empty.")
             return
-        queue_list = "\n".join(guild_queues[guild_id])
+        queue_list = "\n".join([f"{url} - {duration//60}:{duration%60:02d}" for url, duration in guild_queues[guild_id]])
         await interaction.response.send_message(f"Current queue:\n{queue_list}")
 
     @app_commands.command(name="clear", description="Clear the queue")
