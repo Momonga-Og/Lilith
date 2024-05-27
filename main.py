@@ -218,12 +218,14 @@ class MusicBot(commands.Cog):
 
 @commands.Cog.listener()
 async def on_voice_state_update(self, member, before, after):
+    print(f"Voice state updated for {member.display_name}")
     # Check if the bot was kicked from the voice channel
     if member == self.bot.user and before.channel is not None and after.channel is None:
         guild_id = before.channel.guild.id
         if guild_id in self.channel_map:
             channel = self.bot.get_channel(self.channel_map[guild_id])
             await channel.send(f"I was kicked from the voice channel by {before.member.display_name}.")
+
 
 
 @bot.event
