@@ -119,9 +119,8 @@ class MusicBot(commands.Cog):
             return
         
         guild_id = interaction.guild.id
-        if guild_id not in guild_queues:
-            guild_queues[guild_id] = []
-        
+        guild_queues[guild_id] = []  # Clear the queue before adding the new song
+
         guild_queues[guild_id].append((url, 0, 'Unknown title', ''))  # Placeholder for duration, title, thumbnail
         
         # Map the interaction channel to the guild_id
@@ -142,8 +141,7 @@ class MusicBot(commands.Cog):
             return
 
         guild_id = interaction.guild.id
-        if guild_id not in guild_queues:
-            guild_queues[guild_id] = []
+        guild_queues[guild_id] = []  # Clear the queue before adding the looped songs
 
         # Add the song to the queue 10 times
         for _ in range(10):
