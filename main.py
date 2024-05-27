@@ -16,6 +16,8 @@ tree = bot.tree
 
 # Dictionary to hold guild queues
 guild_queues = {}
+# Dictionary to hold the leave timer
+leave_timers = {}
 
 # Function to download YouTube audio
 def download_audio(url):
@@ -91,6 +93,21 @@ class MusicBot(commands.Cog):
                 vc.play(discord.FFmpegPCMAudio(executable="ffmpeg", source=filename), after=after_playing)
             except Exception as e:
                 print(f"Error in play_next: {e}")
+        else:
+            # No more songs in the queue, set a timer to leave the voice channel
+            if guild_id in leave_timers:
+                leave_timers[guild_id].cancel()
+            leave_timers[guild_id] = self.bot.loop.call_later(60, lambda: asyncio.create_task(self.leave_voice_channel(guild_id)))
+
+    async def leave_voice_channel(self, guild_id):
+        vc = self.bot.get_guild(guild_id).voice_client
+        if vc is not None:
+            await vc.disconnect()
+            if guild_id in guild_queues:
+                guild_queues.pop(guild_id)
+            if guild_id in leave_timers:
+                leave_timers.pop(guild_id)
+            print(f"Left the voice channel in guild {guild_id} due to inactivity.")
 
     @app_commands.command(name="play", description="Play a song")
     @app_commands.describe(url="The URL of the song to play")
@@ -114,6 +131,31 @@ class MusicBot(commands.Cog):
             await self.play_next(guild_id)
         
         await interaction.followup.send("Added song to the queue and will play it soon.")
+
+    @app_commands.command(name="loop", description="Loop a song 10 times")
+    @app_commands.describe(url="The URL of the song to loop")
+    async def loop(self, interaction: discord.Interaction, url: str):
+        await interaction.response.defer()  # Defer the response to avoid the interaction timeout
+
+        vc = await self.join_channel(interaction)
+        if vc is None:
+            return
+
+        guild_id = interaction.guild.id
+        if guild_id not in guild_queues:
+            guild_queues[guild_id] = []
+
+        # Add the song to the queue 10 times
+        for _ in range(10):
+            guild_queues[guild_id].append((url, 0, 'Unknown title', ''))  # Placeholder for duration, title, thumbnail
+        
+        # Map the interaction channel to the guild_id
+        self.channel_map[guild_id] = interaction.channel.id
+        
+        if not vc.is_playing():
+            await self.play_next(guild_id)
+        
+        await interaction.followup.send("Added song to the queue to loop 10 times.")
 
     @app_commands.command(name="pause", description="Pause the current song")
     async def pause(self, interaction: discord.Interaction):
