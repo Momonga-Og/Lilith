@@ -10,7 +10,7 @@ load_dotenv()  # Load environment variables from .env file
 
 intents = discord.Intents.default()
 intents.message_content = True
-intents.voice_states = True  # Enable voice state intent
+intents.voice_state = True  # Enable voice state intent
 
 bot = commands.Bot(command_prefix='!', intents=intents)
 tree = bot.tree
@@ -216,17 +216,19 @@ class MusicBot(commands.Cog):
         else:
             await interaction.response.send_message("I am not in a voice channel.")
 
-@commands.Cog.listener()
-async def on_voice_state_update(self, member, before, after):
-    print(f"Voice state updated for {member.display_name}")
-    # Check if the bot was kicked from the voice channel
-    if member == self.bot.user and before.channel is not None and after.channel is None:
-        guild_id = before.channel.guild.id
-        if guild_id in self.channel_map:
-            channel = self.bot.get_channel(self.channel_map[guild_id])
-            await channel.send(f"I was kicked from the voice channel by {before.member.display_name}.")
-
-
+    @commands.Cog.listener()
+    async def on_voice_state_update(self, member, before, after):
+        # Check if the bot was kicked from the voice channel
+        if member == self.bot.user and before.channel is not None and after.channel is None:
+            guild_id = before.channel.guild.id
+            if guild_id in self.channel_map:
+                channel = self.bot.get_channel(self.channel_map[guild_id])
+                # Find out who caused the bot to be kicked
+                for other_member in before.channel.members:
+                    if other_member.guild_permissions.move_members:
+                        # We assume the user with the permission to move members is the one who kicked the bot
+                        await channel.send(f"I was kicked from the voice channel by {other_member.display_name}.")
+                        break
 
 @bot.event
 async def on_ready():
