@@ -34,10 +34,12 @@ def download_audio(url):
             info = ydl.extract_info(url, download=True)
             filename = ydl.prepare_filename(info).replace('.webm', '.mp3').replace('.m4a', '.mp3')
             duration = info.get('duration', 0)  # Duration in seconds
-            return filename, duration
+            title = info.get('title', 'Unknown title')
+            thumbnail = info.get('thumbnail', '')
+            return filename, duration, title, thumbnail
     except Exception as e:
         print(f"An error occurred: {e}")
-        return None, 0
+        return None, 0, 'Unknown title', ''
 
 class MusicBot(commands.Cog):
     def __init__(self, bot):
@@ -62,11 +64,11 @@ class MusicBot(commands.Cog):
                 print(f"Voice client is not connected for guild {guild_id}")
                 return
 
-            url, duration = guild_queues[guild_id].pop(0)
+            url, duration, title, thumbnail = guild_queues[guild_id].pop(0)
             loop = asyncio.get_event_loop()
 
             try:
-                filename, duration = await loop.run_in_executor(None, download_audio, url)
+                filename, duration, title, thumbnail = await loop.run_in_executor(None, download_audio, url)
                 if filename is None:
                     await self.bot.get_guild(guild_id).text_channels[0].send(f"Failed to download audio from {url}")
                     return
@@ -79,6 +81,11 @@ class MusicBot(commands.Cog):
                         fut.result()
                     except Exception as e:
                         print(f"Error in play_next: {e}")
+
+                embed = discord.Embed(title="Now Playing", description=title, color=discord.Color.blue())
+                embed.set_thumbnail(url=thumbnail)
+                embed.add_field(name="Duration", value=f"{duration//60}:{duration%60:02d}")
+                await self.bot.get_guild(guild_id).text_channels[0].send(embed=embed)
 
                 vc.play(discord.FFmpegPCMAudio(executable="ffmpeg", source=filename), after=after_playing)
             except Exception as e:
@@ -96,7 +103,7 @@ class MusicBot(commands.Cog):
         if guild_id not in guild_queues:
             guild_queues[guild_id] = []
         
-        guild_queues[guild_id].append((url, 0))  # Placeholder for duration
+        guild_queues[guild_id].append((url, 0, 'Unknown title', ''))  # Placeholder for duration, title, thumbnail
         
         if not vc.is_playing():
             await self.play_next(guild_id)
@@ -129,6 +136,7 @@ class MusicBot(commands.Cog):
             return
         vc.stop()
         await interaction.response.send_message("Skipped the current song.")
+        await self.play_next(interaction.guild.id)  # Play the next song in the queue
 
     @app_commands.command(name="queue", description="Show the current queue")
     async def queue(self, interaction: discord.Interaction):
@@ -136,7 +144,7 @@ class MusicBot(commands.Cog):
         if guild_id not in guild_queues or not guild_queues[guild_id]:
             await interaction.response.send_message("The queue is empty.")
             return
-        queue_list = "\n".join([f"{url} - {duration//60}:{duration%60:02d}" for url, duration in guild_queues[guild_id]])
+        queue_list = "\n".join([f"{title} - {duration//60}:{duration%60:02d}" for url, duration, title, thumbnail in guild_queues[guild_id]])
         await interaction.response.send_message(f"Current queue:\n{queue_list}")
 
     @app_commands.command(name="clear", description="Clear the queue")
