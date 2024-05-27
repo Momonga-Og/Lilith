@@ -29,6 +29,8 @@ def download_audio(url):
             'preferredcodec': 'mp3',
             'preferredquality': '192',
         }],
+        'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3',
+        'nocheckcertificate': True,
     }
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -38,6 +40,9 @@ def download_audio(url):
             title = info.get('title', 'Unknown title')
             thumbnail = info.get('thumbnail', '')
             return filename, duration, title, thumbnail
+    except yt_dlp.utils.DownloadError as e:
+        print(f"Download error: {e}")
+        return None, 0, 'Unknown title', ''
     except Exception as e:
         print(f"An error occurred: {e}")
         return None, 0, 'Unknown title', ''
