@@ -5,9 +5,6 @@ import asyncio
 import yt_dlp
 import os
 from dotenv import load_dotenv
-from pydub import AudioSegment
-import matplotlib.pyplot as plt
-from PIL import Image
 
 load_dotenv()  # Load environment variables from .env file
 
@@ -34,7 +31,6 @@ def download_audio(url):
         }],
         'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3',
         'nocheckcertificate': True,
-        'cookiefile': 'cookies.txt',  # Use cookies for YouTube
     }
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -50,19 +46,6 @@ def download_audio(url):
     except Exception as e:
         print(f"An error occurred: {e}")
         return None, 0, 'Unknown title', ''
-
-# Function to create audio visualization
-def create_visualizer(audio_file, output_image):
-    audio = AudioSegment.from_file(audio_file)
-    data = audio.get_array_of_samples()
-    
-    plt.figure(figsize=(14, 5))
-    plt.plot(data)
-    plt.title('Audio Waveform')
-    plt.savefig(output_image)
-    plt.close()
-
-    return output_image
 
 class MusicBot(commands.Cog):
     def __init__(self, bot):
@@ -107,13 +90,10 @@ class MusicBot(commands.Cog):
                     except Exception as e:
                         print(f"Error in play_next: {e}")
 
-                # Create and send the visualizer image
-                visualizer_image = create_visualizer(filename, f"visualizers/{os.path.basename(filename)}.png")
                 embed = discord.Embed(title="Now Playing", description=title, color=discord.Color.blue())
                 embed.set_thumbnail(url=thumbnail)
-                embed.set_image(url=f"attachment://{visualizer_image}")
                 channel = self.bot.get_channel(self.channel_map[guild_id])
-                await channel.send(embed=embed, file=discord.File(visualizer_image))
+                await channel.send(embed=embed)
 
                 vc.play(discord.FFmpegPCMAudio(executable="ffmpeg", source=filename), after=after_playing)
             except Exception as e:
