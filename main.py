@@ -44,6 +44,7 @@ def download_audio(url):
 class MusicBot(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
+        self.channel_map = {}  # To keep track of which channel to send feedback
 
     async def join_channel(self, interaction: discord.Interaction):
         if interaction.user.voice is None:
@@ -70,7 +71,8 @@ class MusicBot(commands.Cog):
             try:
                 filename, duration, title, thumbnail = await loop.run_in_executor(None, download_audio, url)
                 if filename is None:
-                    await self.bot.get_guild(guild_id).text_channels[0].send(f"Failed to download audio from {url}")
+                    channel = self.bot.get_channel(self.channel_map[guild_id])
+                    await channel.send(f"Failed to download audio from {url}")
                     return
 
                 def after_playing(error):
@@ -84,8 +86,8 @@ class MusicBot(commands.Cog):
 
                 embed = discord.Embed(title="Now Playing", description=title, color=discord.Color.blue())
                 embed.set_thumbnail(url=thumbnail)
-                embed.add_field(name="Duration", value=f"{duration//60}:{duration%60:02d}")
-                await self.bot.get_guild(guild_id).text_channels[0].send(embed=embed)
+                channel = self.bot.get_channel(self.channel_map[guild_id])
+                await channel.send(embed=embed)
 
                 vc.play(discord.FFmpegPCMAudio(executable="ffmpeg", source=filename), after=after_playing)
             except Exception as e:
@@ -104,6 +106,9 @@ class MusicBot(commands.Cog):
             guild_queues[guild_id] = []
         
         guild_queues[guild_id].append((url, 0, 'Unknown title', ''))  # Placeholder for duration, title, thumbnail
+        
+        # Map the interaction channel to the guild_id
+        self.channel_map[guild_id] = interaction.channel.id
         
         if not vc.is_playing():
             await self.play_next(guild_id)
