@@ -5,6 +5,10 @@ import asyncio
 import yt_dlp
 import os
 from dotenv import load_dotenv
+from pydub import AudioSegment
+import matplotlib.pyplot as plt
+import numpy as np
+from PIL import Image
 
 load_dotenv()  # Load environment variables from .env file
 
@@ -46,6 +50,23 @@ def download_audio(url):
     except Exception as e:
         print(f"An error occurred: {e}")
         return None, 0, 'Unknown title', ''
+
+# Function to create an audio visualizer
+def create_visualizer(audio_file):
+    audio = AudioSegment.from_file(audio_file)
+    samples = audio.get_array_of_samples()
+
+    plt.figure(figsize=(10, 4))
+    plt.plot(samples[:10000], color='blue')  # Plot a segment of the audio for visualization
+    plt.title('Audio Visualization')
+    plt.xlabel('Samples')
+    plt.ylabel('Amplitude')
+
+    visualizer_file = 'visualizer.png'
+    plt.savefig(visualizer_file)
+    plt.close()
+
+    return visualizer_file
 
 class MusicBot(commands.Cog):
     def __init__(self, bot):
@@ -94,6 +115,10 @@ class MusicBot(commands.Cog):
                 embed.set_thumbnail(url=thumbnail)
                 channel = self.bot.get_channel(self.channel_map[guild_id])
                 await channel.send(embed=embed)
+
+                # Create and send the audio visualizer
+                visualizer_file = create_visualizer(filename)
+                await channel.send(file=discord.File(visualizer_file))
 
                 vc.play(discord.FFmpegPCMAudio(executable="ffmpeg", source=filename), after=after_playing)
             except Exception as e:
