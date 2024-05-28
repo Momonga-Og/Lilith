@@ -8,6 +8,8 @@ from dotenv import load_dotenv
 import matplotlib.pyplot as plt
 import numpy as np
 import wave
+from scipy.signal import spectrogram
+
 from PIL import Image
 import io
 
@@ -64,13 +66,16 @@ def generate_visualization(audio_file):
     # Get the frame rate
     framerate = spf.getframerate()
 
-    # Time axis for the plot
-    time = np.linspace(0, len(signal) / framerate, num=len(signal))
+    # Generate the spectrogram
+    f, t, Sxx = spectrogram(signal, framerate)
 
     # Create the plot
-    plt.figure(1)
-    plt.title('Signal Wave...')
-    plt.plot(time, signal)
+    plt.figure(figsize=(10, 6))
+    plt.pcolormesh(t, f, 10 * np.log10(Sxx), shading='gouraud')
+    plt.ylabel('Frequency [Hz]')
+    plt.xlabel('Time [sec]')
+    plt.title('Spectrogram')
+    plt.colorbar(label='Intensity [dB]')
 
     # Save the plot to a bytes buffer
     buf = io.BytesIO()
