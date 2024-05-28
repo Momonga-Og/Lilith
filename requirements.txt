@@ -3,3 +3,6 @@ yt-dlp
 discord-py-interactions
 pynacl
 python-dotenv
+matplotlib
+numpy
+Pillow
