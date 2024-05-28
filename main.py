@@ -6,6 +6,7 @@ import yt_dlp
 import os
 from dotenv import load_dotenv
 import json
+import logging
 
 load_dotenv()  # Load environment variables from .env file
 
@@ -25,11 +26,19 @@ leave_timers = {}
 USER_PLAYLISTS_FILE = 'user_playlists.json'
 PLAYLISTS_FILE = 'playlists.json'
 
+# Set up logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 # Function to load data from a JSON file
 def load_json(file_path):
     if os.path.exists(file_path):
         with open(file_path, 'r') as file:
-            return json.load(file)
+            try:
+                return json.load(file)
+            except json.JSONDecodeError:
+                # Handle empty or malformed file by returning an empty dictionary
+                return {}
     return {}
 
 # Function to save data to a JSON file
@@ -98,8 +107,7 @@ class MusicBot(commands.Cog):
                     channel = self.bot.get_channel(self.channel_map[guild_id])
                     await channel.send(f"Failed to download audio from {url}")
                     return
-
-                def after_playing(error):
+                                    def after_playing(error):
                     if error:
                         print(f"Error occurred: {error}")
                     fut = asyncio.run_coroutine_threadsafe(self.play_next(guild_id), self.bot.loop)
@@ -133,6 +141,7 @@ class MusicBot(commands.Cog):
             print(f"Left the voice channel in guild {guild_id} due to inactivity.")
 
     async def register_song(self, user_id, user_name, song_title, song_url):
+        logger.info(f"Registering song: {song_title} by {user_name} (ID: {user_id})")
         user_playlists = load_json(USER_PLAYLISTS_FILE)
         playlists = load_json(PLAYLISTS_FILE)
 
@@ -149,6 +158,7 @@ class MusicBot(commands.Cog):
         # Save the updated data
         save_json(user_playlists, USER_PLAYLISTS_FILE)
         save_json(playlists, PLAYLISTS_FILE)
+        logger.info(f"Song registered successfully: {song_title} by {user_name} (ID: {user_id})")
 
     @app_commands.command(name="play", description="Play a song")
     @app_commands.describe(url="The URL of the song to play")
@@ -175,6 +185,7 @@ class MusicBot(commands.Cog):
         user_id = interaction.user.id
         user_name = interaction.user.name
         song_title = 'Unknown title'  # Placeholder until the title is fetched during download
+        logger.info(f"Calling register_song for user: {user_name} (ID: {user_id}) with URL: {url}")
         await self.register_song(user_id, user_name, song_title, url)
 
     @app_commands.command(name="loop", description="Loop a song 10 times")
@@ -203,6 +214,7 @@ class MusicBot(commands.Cog):
         user_id = interaction.user.id
         user_name = interaction.user.name
         song_title = 'Unknown title'  # Placeholder until the title is fetched during download
+        logger.info(f"Calling register_song for user: {user_name} (ID: {user_id}) with URL: {url}")
         await self.register_song(user_id, user_name, song_title, url)
 
     @app_commands.command(name="pause", description="Pause the current song")
@@ -283,3 +295,5 @@ async def on_ready():
 
 # Run the bot with the token from the environment variable
 bot.run(os.getenv('DISCORD_BOT_TOKEN'))
+
+
