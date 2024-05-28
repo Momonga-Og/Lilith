@@ -23,25 +23,20 @@ import json
 
 load_dotenv()  # Load environment variables from .env file
 
+# Initialize Discord bot
 intents = discord.Intents.default()
 intents.message_content = True
 intents.voice_states = True  # Enable voice state intent
-
 bot = commands.Bot(command_prefix='!', intents=intents)
 tree = bot.tree
 
-# Dictionary to hold guild queues
+# Dictionaries to manage guild queues and leave timers
 guild_queues = {}
-# Dictionary to hold the leave timer
 leave_timers = {}
 
-# Path to JSON files
+# Paths to JSON files for storing user playlists and global playlists
 USER_PLAYLISTS_FILE = 'user_playlists.json'
 PLAYLISTS_FILE = 'playlists.json'
-
-# Set up logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
 
 # Function to load data from a JSON file
 def load_json(file_path):
@@ -81,10 +76,10 @@ def download_audio(url):
             thumbnail = info.get('thumbnail', '')
             return filename, duration, title, thumbnail
     except yt_dlp.utils.DownloadError as e:
-        print(f"Download error: {e}")
+        logger.error(f"Download error: {e}")
         return None, 0, 'Unknown title', ''
     except Exception as e:
-        print(f"An error occurred: {e}")
+        logger.error(f"An error occurred: {e}")
         return None, 0, 'Unknown title', ''
 
 class MusicBot(commands.Cog):
@@ -108,7 +103,7 @@ class MusicBot(commands.Cog):
         if guild_id in guild_queues and guild_queues[guild_id]:
             vc = self.bot.get_guild(guild_id).voice_client
             if vc is None or not vc.is_connected():
-                print(f"Voice client is not connected for guild {guild_id}")
+                logger.error(f"Voice client is not connected for guild {guild_id}")
                 return
 
             url, duration, title, thumbnail = guild_queues[guild_id].pop(0)
@@ -123,12 +118,12 @@ class MusicBot(commands.Cog):
 
                 def after_playing(error):
                     if error:
-                        print(f"Error occurred: {error}")
+                        logger.error(f"Error occurred: {error}")
                     fut = asyncio.run_coroutine_threadsafe(self.play_next(guild_id), self.bot.loop)
                     try:
                         fut.result()
                     except Exception as e:
-                        print(f"Error in play_next: {e}")
+                        logger.error(f"Error in play_next: {e}")
 
                 embed = discord.Embed(title="Now Playing", description=title, color=discord.Color.blue())
                 embed.set_thumbnail(url=thumbnail)
@@ -137,7 +132,7 @@ class MusicBot(commands.Cog):
 
                 vc.play(discord.FFmpegPCMAudio(executable="ffmpeg", source=filename), after=after_playing)
             except Exception as e:
-                print(f"Error in play_next: {e}")
+                logger.error(f"Error in play_next: {e}")
         else:
             # No more songs in the queue, set a timer to leave the voice channel
             if guild_id in leave_timers:
@@ -152,7 +147,7 @@ class MusicBot(commands.Cog):
                 guild_queues.pop(guild_id)
             if guild_id in leave_timers:
                 leave_timers.pop(guild_id)
-            print(f"Left the voice channel in guild {guild_id} due to inactivity.")
+            logger.info(f"Left the voice channel in guild {guild_id} due to inactivity.")
 
     async def register_song(self, user_id, user_name, song_title, song_url):
         logger.info(f"Registering song: {song_title} by {user_name} (ID: {user_id})")
@@ -184,7 +179,8 @@ class MusicBot(commands.Cog):
             return
         
         guild_id = interaction.guild.id
-        guild_queues[guild_id] = []
+        if guild_id not in guild_queues:
+            guild_queues[guild_id] = []
 
         guild_queues[guild_id].append((url, 0, 'Unknown title', ''))
 
@@ -212,7 +208,8 @@ class MusicBot(commands.Cog):
             return
 
         guild_id = interaction.guild.id
-        guild_queues[guild_id] = []
+        if guild_id not in guild_queues:
+            guild_queues[guild_id] = []
 
         for _ in range(10):
             guild_queues[guild_id].append((url, 0, 'Unknown title', ''))
@@ -305,7 +302,7 @@ async def on_ready():
     if not bot.cogs:
         await bot.add_cog(MusicBot(bot))
     await tree.sync()
-    print(f'Logged in as {bot.user}!')
+    logger.info(f'Logged in as {bot.user}!')
 
 # Run the bot with the token from the environment variable
 bot.run(os.getenv('DISCORD_BOT_TOKEN'))
