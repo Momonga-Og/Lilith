@@ -52,6 +52,7 @@ def download_audio(url):
         print(f"An error occurred: {e}")
         return None, 0, 'Unknown title', ''
 
+
 def generate_visualization(audio_file):
     # Open the audio file
     spf = wave.open(audio_file, 'r')
@@ -276,4 +277,4 @@ async def on_ready():
     print(f'Logged in as {bot.user}!')
 
 # Run the bot with the token from the environment variable
-# bot.run(os.getenv('DISCORD_BOT_TOKEN'))
+bot.run(os.getenv('DISCORD_BOT_TOKEN'))
