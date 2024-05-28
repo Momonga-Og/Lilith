@@ -6,6 +6,8 @@ file_handler = logging.FileHandler('bot.log')
 file_handler.setLevel(logging.INFO)
 formatter = logging.Formatter('%(asctime)s:%(levelname)s:%(name)s:%(message)s')
 file_handler.setFormatter(formatter)
+logger = logging.getLogger(__name__)
+logger.addHandler(file_handler)
 
 # Initialize the logger
 logger = logging.getLogger(__name__)
