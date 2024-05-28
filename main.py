@@ -8,7 +8,6 @@ from dotenv import load_dotenv
 import json
 import logging
 
-
 load_dotenv()  # Load environment variables from .env file
 
 intents = discord.Intents.default()
@@ -92,46 +91,45 @@ class MusicBot(commands.Cog):
             await vc.move_to(channel)
         return vc
 
-async def play_next(self, guild_id):
-    if guild_id in guild_queues and guild_queues[guild_id]:
-        vc = self.bot.get_guild(guild_id).voice_client
-        if vc is None or not vc.is_connected():
-            print(f"Voice client is not connected for guild {guild_id}")
-            return
-
-        url, duration, title, thumbnail = guild_queues[guild_id].pop(0)
-        loop = asyncio.get_event_loop()
-
-        try:
-            filename, duration, title, thumbnail = await loop.run_in_executor(None, download_audio, url)
-            if filename is None:
-                channel = self.bot.get_channel(self.channel_map[guild_id])
-                await channel.send(f"Failed to download audio from {url}")
+    async def play_next(self, guild_id):
+        if guild_id in guild_queues and guild_queues[guild_id]:
+            vc = self.bot.get_guild(guild_id).voice_client
+            if vc is None or not vc.is_connected():
+                print(f"Voice client is not connected for guild {guild_id}")
                 return
 
-            def after_playing(error):
-                if error:
-                    print(f"Error occurred: {error}")
-                fut = asyncio.run_coroutine_threadsafe(self.play_next(guild_id), self.bot.loop)
-                try:
-                    fut.result()
-                except Exception as e:
-                    print(f"Error in play_next: {e}")
+            url, duration, title, thumbnail = guild_queues[guild_id].pop(0)
+            loop = asyncio.get_event_loop()
 
-            embed = discord.Embed(title="Now Playing", description=title, color=discord.Color.blue())
-            embed.set_thumbnail(url=thumbnail)
-            channel = self.bot.get_channel(self.channel_map[guild_id])
-            await channel.send(embed=embed)
+            try:
+                filename, duration, title, thumbnail = await loop.run_in_executor(None, download_audio, url)
+                if filename is None:
+                    channel = self.bot.get_channel(self.channel_map[guild_id])
+                    await channel.send(f"Failed to download audio from {url}")
+                    return
 
-            vc.play(discord.FFmpegPCMAudio(executable="ffmpeg", source=filename), after=after_playing)
-        except Exception as e:
-            print(f"Error in play_next: {e}")
-    else:
-        # No more songs in the queue, set a timer to leave the voice channel
-        if guild_id in leave_timers:
-            leave_timers[guild_id].cancel()
-        leave_timers[guild_id] = self.bot.loop.call_later(60, lambda: asyncio.create_task(self.leave_voice_channel(guild_id)))
+                def after_playing(error):
+                    if error:
+                        print(f"Error occurred: {error}")
+                    fut = asyncio.run_coroutine_threadsafe(self.play_next(guild_id), self.bot.loop)
+                    try:
+                        fut.result()
+                    except Exception as e:
+                        print(f"Error in play_next: {e}")
 
+                embed = discord.Embed(title="Now Playing", description=title, color=discord.Color.blue())
+                embed.set_thumbnail(url=thumbnail)
+                channel = self.bot.get_channel(self.channel_map[guild_id])
+                await channel.send(embed=embed)
+
+                vc.play(discord.FFmpegPCMAudio(executable="ffmpeg", source=filename), after=after_playing)
+            except Exception as e:
+                print(f"Error in play_next: {e}")
+        else:
+            # No more songs in the queue, set a timer to leave the voice channel
+            if guild_id in leave_timers:
+                leave_timers[guild_id].cancel()
+            leave_timers[guild_id] = self.bot.loop.call_later(60, lambda: asyncio.create_task(self.leave_voice_channel(guild_id)))
 
     async def leave_voice_channel(self, guild_id):
         vc = self.bot.get_guild(guild_id).voice_client
@@ -143,88 +141,82 @@ async def play_next(self, guild_id):
                 leave_timers.pop(guild_id)
             print(f"Left the voice channel in guild {guild_id} due to inactivity.")
 
-async def register_song(self, user_id, user_name, song_title, song_url):
-    logger.info(f"Registering song: {song_title} by {user_name} (ID: {user_id})")
-    user_playlists = load_json(USER_PLAYLISTS_FILE)
-    playlists = load_json(PLAYLISTS_FILE)
+    async def register_song(self, user_id, user_name, song_title, song_url):
+        logger.info(f"Registering song: {song_title} by {user_name} (ID: {user_id})")
+        user_playlists = load_json(USER_PLAYLISTS_FILE)
+        playlists = load_json(PLAYLISTS_FILE)
 
-    # Register user playlist
-    if user_id not in user_playlists:
-        user_playlists[user_id] = {'user_name': user_name, 'songs': []}
-    user_playlists[user_id]['songs'].append({'title': song_title, 'url': song_url})
+        # Register user playlist
+        if user_id not in user_playlists:
+            user_playlists[user_id] = {'user_name': user_name, 'songs': []}
+        user_playlists[user_id]['songs'].append({'title': song_title, 'url': song_url})
 
-    # Register in global playlists
-    if song_title not in playlists:
-        playlists[song_title] = []
-    playlists[song_title].append({'user_id': user_id, 'user_name': user_name, 'url': song_url})
+        # Register in global playlists
+        if song_title not in playlists:
+            playlists[song_title] = []
+        playlists[song_title].append({'user_id': user_id, 'user_name': user_name, 'url': song_url})
 
-    # Save the updated data
-    save_json(user_playlists, USER_PLAYLISTS_FILE)
-    save_json(playlists, PLAYLISTS_FILE)
-    logger.info(f"Song registered successfully: {song_title} by {user_name} (ID: {user_id})")
+        # Save the updated data
+        save_json(user_playlists, USER_PLAYLISTS_FILE)
+        save_json(playlists, PLAYLISTS_FILE)
+        logger.info(f"Song registered successfully: {song_title} by {user_name} (ID: {user_id})")
 
+    @app_commands.command(name="play", description="Play a song")
+    @app_commands.describe(url="The URL of the song to play")
+    async def play(self, interaction: discord.Interaction, url: str):
+        await interaction.response.defer()
 
-@app_commands.command(name="play", description="Play a song")
-@app_commands.describe(url="The URL of the song to play")
-async def play(self, interaction: discord.Interaction, url: str):
-    await interaction.response.defer()
+        vc = await self.join_channel(interaction)
+        if vc is None:
+            return
+        
+        guild_id = interaction.guild.id
+        guild_queues[guild_id] = []
 
-    vc = await self.join_channel(interaction)
-    if vc is None:
-        return
-    
-    guild_id = interaction.guild.id
-    guild_queues[guild_id] = []
-
-    guild_queues[guild_id].append((url, 0, 'Unknown title', ''))
-
-    self.channel_map[guild_id] = interaction.channel.id
-    
-    if not vc.is_playing():
-        await self.play_next(guild_id)
-    
-    await interaction.followup.send("Added song to the queue and will play it soon.")
-
-    # Register song information
-    user_id = interaction.user.id
-    user_name = interaction.user.name
-    song_title = 'Unknown title'  # Placeholder until the title is fetched during download
-    logger.info(f"Calling register_song for user: {user_name} (ID: {user_id}) with URL: {url}")
-    await self.register_song(user_id, user_name, song_title, url)
-
-
-
-@app_commands.command(name="loop", description="Loop a song 10 times")
-@app_commands.describe(url="The URL of the song to loop")
-async def loop(self, interaction: discord.Interaction, url: str):
-    await interaction.response.defer()
-
-    vc = await self.join_channel(interaction)
-    if vc is None:
-        return
-
-    guild_id = interaction.guild.id
-    guild_queues[guild_id] = []
-
-    for _ in range(10):
         guild_queues[guild_id].append((url, 0, 'Unknown title', ''))
 
-    self.channel_map[guild_id] = interaction.channel.id
+        self.channel_map[guild_id] = interaction.channel.id
+        
+        if not vc.is_playing():
+            await self.play_next(guild_id)
+        
+        await interaction.followup.send("Added song to the queue and will play it soon.")
 
-    if not vc.is_playing():
-        await self.play_next(guild_id)
+        # Register song information
+        user_id = interaction.user.id
+        user_name = interaction.user.name
+        song_title = 'Unknown title'  # Placeholder until the title is fetched during download
+        logger.info(f"Calling register_song for user: {user_name} (ID: {user_id}) with URL: {url}")
+        await self.register_song(user_id, user_name, song_title, url)
 
-    await interaction.followup.send("Added song to the queue to loop 10 times.")
+    @app_commands.command(name="loop", description="Loop a song 10 times")
+    @app_commands.describe(url="The URL of the song to loop")
+    async def loop(self, interaction: discord.Interaction, url: str):
+        await interaction.response.defer()
 
-    # Register song information
-    user_id = interaction.user.id
-    user_name = interaction.user.name
-    song_title = 'Unknown title'  # Placeholder until the title is fetched during download
-    logger.info(f"Calling register_song for user: {user_name} (ID: {user_id}) with URL: {url}")
-    await self.register_song(user_id, user_name, song_title, url)
+        vc = await self.join_channel(interaction)
+        if vc is None:
+            return
 
+        guild_id = interaction.guild.id
+        guild_queues[guild_id] = []
 
+        for _ in range(10):
+            guild_queues[guild_id].append((url, 0, 'Unknown title', ''))
 
+        self.channel_map[guild_id] = interaction.channel.id
+
+        if not vc.is_playing():
+            await self.play_next(guild_id)
+
+        await interaction.followup.send("Added song to the queue to loop 10 times.")
+
+        # Register song information
+        user_id = interaction.user.id
+        user_name = interaction.user.name
+        song_title = 'Unknown title'  # Placeholder until the title is fetched during download
+        logger.info(f"Calling register_song for user: {user_name} (ID: {user_id}) with URL: {url}")
+        await self.register_song(user_id, user_name, song_title, url)
 
     @app_commands.command(name="pause", description="Pause the current song")
     async def pause(self, interaction: discord.Interaction):
@@ -304,5 +296,3 @@ async def on_ready():
 
 # Run the bot with the token from the environment variable
 bot.run(os.getenv('DISCORD_BOT_TOKEN'))
-
-
