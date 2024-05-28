@@ -5,13 +5,13 @@ import asyncio
 import yt_dlp
 import os
 from dotenv import load_dotenv
+import json
 
 load_dotenv()  # Load environment variables from .env file
 
 intents = discord.Intents.default()
 intents.message_content = True
 intents.voice_states = True  # Enable voice state intent
-
 
 bot = commands.Bot(command_prefix='!', intents=intents)
 tree = bot.tree
@@ -20,6 +20,22 @@ tree = bot.tree
 guild_queues = {}
 # Dictionary to hold the leave timer
 leave_timers = {}
+
+# Path to JSON files
+USER_PLAYLISTS_FILE = 'user_playlists.json'
+PLAYLISTS_FILE = 'playlists.json'
+
+# Function to load data from a JSON file
+def load_json(file_path):
+    if os.path.exists(file_path):
+        with open(file_path, 'r') as file:
+            return json.load(file)
+    return {}
+
+# Function to save data to a JSON file
+def save_json(data, file_path):
+    with open(file_path, 'w') as file:
+        json.dump(data, file, indent=4)
 
 # Function to download YouTube audio
 def download_audio(url):
@@ -116,21 +132,38 @@ class MusicBot(commands.Cog):
                 leave_timers.pop(guild_id)
             print(f"Left the voice channel in guild {guild_id} due to inactivity.")
 
+    async def register_song(self, user_id, user_name, song_title, song_url):
+        user_playlists = load_json(USER_PLAYLISTS_FILE)
+        playlists = load_json(PLAYLISTS_FILE)
+
+        # Register user playlist
+        if user_id not in user_playlists:
+            user_playlists[user_id] = {'user_name': user_name, 'songs': []}
+        user_playlists[user_id]['songs'].append({'title': song_title, 'url': song_url})
+
+        # Register in global playlists
+        if song_title not in playlists:
+            playlists[song_title] = []
+        playlists[song_title].append({'user_id': user_id, 'user_name': user_name, 'url': song_url})
+
+        # Save the updated data
+        save_json(user_playlists, USER_PLAYLISTS_FILE)
+        save_json(playlists, PLAYLISTS_FILE)
+
     @app_commands.command(name="play", description="Play a song")
     @app_commands.describe(url="The URL of the song to play")
     async def play(self, interaction: discord.Interaction, url: str):
-        await interaction.response.defer()  # Defer the response to avoid the interaction timeout
+        await interaction.response.defer()
 
         vc = await self.join_channel(interaction)
         if vc is None:
             return
         
         guild_id = interaction.guild.id
-        guild_queues[guild_id] = []  # Clear the queue before adding the new song
+        guild_queues[guild_id] = []
 
-        guild_queues[guild_id].append((url, 0, 'Unknown title', ''))  # Placeholder for duration, title, thumbnail
-        
-        # Map the interaction channel to the guild_id
+        guild_queues[guild_id].append((url, 0, 'Unknown title', ''))
+
         self.channel_map[guild_id] = interaction.channel.id
         
         if not vc.is_playing():
@@ -138,29 +171,39 @@ class MusicBot(commands.Cog):
         
         await interaction.followup.send("Added song to the queue and will play it soon.")
 
+        # Register song information
+        user_id = interaction.user.id
+        user_name = interaction.user.name
+        song_title = 'Unknown title'  # Placeholder until the title is fetched during download
+        await self.register_song(user_id, user_name, song_title, url)
+
     @app_commands.command(name="loop", description="Loop a song 10 times")
     @app_commands.describe(url="The URL of the song to loop")
     async def loop(self, interaction: discord.Interaction, url: str):
-        await interaction.response.defer()  # Defer the response to avoid the interaction timeout
+        await interaction.response.defer()
 
         vc = await self.join_channel(interaction)
         if vc is None:
             return
 
         guild_id = interaction.guild.id
-        guild_queues[guild_id] = []  # Clear the queue before adding the looped songs
+        guild_queues[guild_id] = []
 
-        # Add the song to the queue 10 times
         for _ in range(10):
-            guild_queues[guild_id].append((url, 0, 'Unknown title', ''))  # Placeholder for duration, title, thumbnail
-        
-        # Map the interaction channel to the guild_id
+            guild_queues[guild_id].append((url, 0, 'Unknown title', ''))
+
         self.channel_map[guild_id] = interaction.channel.id
         
         if not vc.is_playing():
             await self.play_next(guild_id)
         
         await interaction.followup.send("Added song to the queue to loop 10 times.")
+
+        # Register song information
+        user_id = interaction.user.id
+        user_name = interaction.user.name
+        song_title = 'Unknown title'  # Placeholder until the title is fetched during download
+        await self.register_song(user_id, user_name, song_title, url)
 
     @app_commands.command(name="pause", description="Pause the current song")
     async def pause(self, interaction: discord.Interaction):
