@@ -7,5 +7,4 @@ matplotlib
 numpy
 Pillow
 scipy
-json
 logging
