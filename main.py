@@ -1,13 +1,13 @@
 import discord
 from discord.ext import commands
 from discord import app_commands
-from discord import Interaction
 import asyncio
 import yt_dlp
 import os
 from dotenv import load_dotenv
 import json
 import logging
+
 
 load_dotenv()  # Load environment variables from .env file
 
@@ -166,7 +166,7 @@ async def register_song(self, user_id, user_name, song_title, song_url):
 
 @app_commands.command(name="play", description="Play a song")
 @app_commands.describe(url="The URL of the song to play")
-async def play(self, interaction: Interaction, url: str):
+async def play(self, interaction: discord.Interaction, url: str):
     await interaction.response.defer()
 
     vc = await self.join_channel(interaction)
@@ -193,9 +193,10 @@ async def play(self, interaction: Interaction, url: str):
     await self.register_song(user_id, user_name, song_title, url)
 
 
+
 @app_commands.command(name="loop", description="Loop a song 10 times")
 @app_commands.describe(url="The URL of the song to loop")
-async def loop(self, interaction: Interaction, url: str):
+async def loop(self, interaction: discord.Interaction, url: str):
     await interaction.response.defer()
 
     vc = await self.join_channel(interaction)
@@ -221,6 +222,7 @@ async def loop(self, interaction: Interaction, url: str):
     song_title = 'Unknown title'  # Placeholder until the title is fetched during download
     logger.info(f"Calling register_song for user: {user_name} (ID: {user_id}) with URL: {url}")
     await self.register_song(user_id, user_name, song_title, url)
+
 
 
 
