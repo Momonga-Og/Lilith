@@ -5,13 +5,17 @@ import asyncio
 import yt_dlp
 import os
 from dotenv import load_dotenv
+import matplotlib.pyplot as plt
+import numpy as np
+import wave
+from PIL import Image
+import io
 
 load_dotenv()  # Load environment variables from .env file
 
 intents = discord.Intents.default()
 intents.message_content = True
 intents.voice_states = True  # Enable voice state intent
-
 
 bot = commands.Bot(command_prefix='!', intents=intents)
 tree = bot.tree
@@ -21,14 +25,13 @@ guild_queues = {}
 # Dictionary to hold the leave timer
 leave_timers = {}
 
-# Function to download YouTube audio
 def download_audio(url):
     ydl_opts = {
         'format': 'bestaudio/best',
         'outtmpl': 'downloads/%(id)s.%(ext)s',
         'postprocessors': [{
             'key': 'FFmpegExtractAudio',
-            'preferredcodec': 'mp3',
+            'preferredcodec': 'wav',
             'preferredquality': '192',
         }],
         'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3',
@@ -37,7 +40,7 @@ def download_audio(url):
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=True)
-            filename = ydl.prepare_filename(info).replace('.webm', '.mp3').replace('.m4a', '.mp3')
+            filename = ydl.prepare_filename(info).replace('.webm', '.wav').replace('.m4a', '.wav')
             duration = info.get('duration', 0)  # Duration in seconds
             title = info.get('title', 'Unknown title')
             thumbnail = info.get('thumbnail', '')
@@ -48,6 +51,33 @@ def download_audio(url):
     except Exception as e:
         print(f"An error occurred: {e}")
         return None, 0, 'Unknown title', ''
+
+def generate_visualization(audio_file):
+    # Open the audio file
+    spf = wave.open(audio_file, 'r')
+
+    # Extract raw audio from the file
+    signal = spf.readframes(-1)
+    signal = np.frombuffer(signal, dtype='int16')
+
+    # Get the frame rate
+    framerate = spf.getframerate()
+
+    # Time axis for the plot
+    time = np.linspace(0, len(signal) / framerate, num=len(signal))
+
+    # Create the plot
+    plt.figure(1)
+    plt.title('Signal Wave...')
+    plt.plot(time, signal)
+
+    # Save the plot to a bytes buffer
+    buf = io.BytesIO()
+    plt.savefig(buf, format='png')
+    buf.seek(0)
+    image = Image.open(buf)
+
+    return image
 
 class MusicBot(commands.Cog):
     def __init__(self, bot):
@@ -96,6 +126,13 @@ class MusicBot(commands.Cog):
                 embed.set_thumbnail(url=thumbnail)
                 channel = self.bot.get_channel(self.channel_map[guild_id])
                 await channel.send(embed=embed)
+
+                # Generate and send the visualization
+                image = await loop.run_in_executor(None, generate_visualization, filename)
+                with io.BytesIO() as image_binary:
+                    image.save(image_binary, 'PNG')
+                    image_binary.seek(0)
+                    await channel.send(file=discord.File(fp=image_binary, filename='visualization.png'))
 
                 vc.play(discord.FFmpegPCMAudio(executable="ffmpeg", source=filename), after=after_playing)
             except Exception as e:
@@ -239,4 +276,4 @@ async def on_ready():
     print(f'Logged in as {bot.user}!')
 
 # Run the bot with the token from the environment variable
-bot.run(os.getenv('DISCORD_BOT_TOKEN'))
+# bot.run(os.getenv('DISCORD_BOT_TOKEN'))
