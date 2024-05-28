@@ -1,11 +1,3 @@
-import discord
-from discord.ext import commands
-from discord import app_commands
-import asyncio
-import yt_dlp
-import os
-from dotenv import load_dotenv
-import json
 import logging
 
 # Set up logging
@@ -14,7 +6,19 @@ file_handler = logging.FileHandler('bot.log')
 file_handler.setLevel(logging.INFO)
 formatter = logging.Formatter('%(asctime)s:%(levelname)s:%(name)s:%(message)s')
 file_handler.setFormatter(formatter)
+
+# Initialize the logger
+logger = logging.getLogger(__name__)
 logger.addHandler(file_handler)
+
+import discord
+from discord.ext import commands
+from discord import app_commands
+import asyncio
+import yt_dlp
+import os
+from dotenv import load_dotenv
+import json
 
 
 load_dotenv()  # Load environment variables from .env file
