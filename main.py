@@ -1,6 +1,7 @@
 import discord
 from discord.ext import commands
 from discord import app_commands
+from discord import Interaction
 import asyncio
 import yt_dlp
 import os
@@ -165,23 +166,23 @@ async def register_song(self, user_id, user_name, song_title, song_url):
 
 @app_commands.command(name="play", description="Play a song")
 @app_commands.describe(url="The URL of the song to play")
-async def play(self, interaction: discord.Interaction, url: str):
+async def play(self, interaction: Interaction, url: str):
     await interaction.response.defer()
 
     vc = await self.join_channel(interaction)
     if vc is None:
         return
-
+    
     guild_id = interaction.guild.id
     guild_queues[guild_id] = []
 
     guild_queues[guild_id].append((url, 0, 'Unknown title', ''))
 
     self.channel_map[guild_id] = interaction.channel.id
-
+    
     if not vc.is_playing():
         await self.play_next(guild_id)
-
+    
     await interaction.followup.send("Added song to the queue and will play it soon.")
 
     # Register song information
@@ -191,9 +192,10 @@ async def play(self, interaction: discord.Interaction, url: str):
     logger.info(f"Calling register_song for user: {user_name} (ID: {user_id}) with URL: {url}")
     await self.register_song(user_id, user_name, song_title, url)
 
+
 @app_commands.command(name="loop", description="Loop a song 10 times")
 @app_commands.describe(url="The URL of the song to loop")
-async def loop(self, interaction: discord.Interaction, url: str):
+async def loop(self, interaction: Interaction, url: str):
     await interaction.response.defer()
 
     vc = await self.join_channel(interaction)
@@ -219,6 +221,7 @@ async def loop(self, interaction: discord.Interaction, url: str):
     song_title = 'Unknown title'  # Placeholder until the title is fetched during download
     logger.info(f"Calling register_song for user: {user_name} (ID: {user_id}) with URL: {url}")
     await self.register_song(user_id, user_name, song_title, url)
+
 
 
     @app_commands.command(name="pause", description="Pause the current song")
