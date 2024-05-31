@@ -8,3 +8,4 @@ numpy
 Pillow
 scipy
 logging
+discord_components
