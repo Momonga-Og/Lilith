@@ -130,7 +130,8 @@ class MusicBot(commands.Cog):
 
                 embed = discord.Embed(title="Now Playing", description=title, color=discord.Color.blue())
                 embed.set_thumbnail(url=thumbnail)
-                embed.add_field(name="Requested By", value=self.bot.get_user(interaction.user.id).mention)
+                # Assuming the requester information is stored elsewhere as interaction is not available here
+                # embed.add_field(name="Requested By", value=self.bot.get_user(interaction.user.id).mention)
                 embed.add_field(name="Duration", value=f"{duration//60}:{duration%60:02d}")
 
                 view = View()
@@ -185,7 +186,7 @@ class MusicBot(commands.Cog):
     @app_commands.command(name="play", description="Play a song")
     @app_commands.describe(url="The URL of the song to play")
     async def play(self, interaction: discord.Interaction, url: str):
-        await interaction.response.send_message("Processing...", ephemeral=True)
+        await interaction.response.defer()
 
         vc = await self.join_channel(interaction)
         if vc is None:
@@ -218,7 +219,7 @@ class MusicBot(commands.Cog):
     @app_commands.command(name="loop", description="Loop a song 10 times")
     @app_commands.describe(url="The URL of the song to loop")
     async def loop(self, interaction: discord.Interaction, url: str):
-        await interaction.response.send_message("Processing...", ephemeral=True)
+        await interaction.response.defer()
 
         vc = await self.join_channel(interaction)
         if vc is None:
