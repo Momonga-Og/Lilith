@@ -122,11 +122,11 @@ class MusicBot(commands.Cog):
                         logger.error(f"Error occurred: {error}")
                     else:
                         guild_queues[guild_id].pop(0)  # Remove the song from the queue after playing
-                    fut = asyncio.run_coroutine_threadsafe(self.play_next(guild_id), self.bot.loop)
-                    try:
-                        fut.result()
-                    except Exception as e:
-                        logger.error(f"Error in play_next: {e}")
+                        fut = asyncio.run_coroutine_threadsafe(self.play_next(guild_id), self.bot.loop)
+                        try:
+                            fut.result()
+                        except Exception as e:
+                            logger.error(f"Error in play_next: {e}")
 
                 embed = discord.Embed(title="Now Playing", description=title, color=discord.Color.blue())
                 embed.set_thumbnail(url=thumbnail)
@@ -308,7 +308,7 @@ class MusicBot(commands.Cog):
                 channel = self.bot.get_channel(self.channel_map[guild_id])
                 # Find out who caused the bot to be kicked
                 for other_member in before.channel.members:
-                    if other_member.guild_permissions.move_members:
+                    if other_member guild_permissions.move_members:
                         # We assume the user with the permission to move members is the one who kicked the bot
                         await channel.send(f"I was kicked from the voice channel by {other_member.display_name}.")
                         break
@@ -323,8 +323,7 @@ async def on_ready():
 @bot.event
 async def on_interaction(interaction):
     if interaction.type == discord.InteractionType.component:
-        custom_id = interaction.data['custom_id']
-        if custom_id == "stop_button":
+        if interaction.data['custom_id'] == "stop_button":
             await interaction.response.send_message("Stopping the song...", ephemeral=True)
             vc = interaction.guild.voice_client
             if vc and vc.is_playing():
@@ -332,26 +331,26 @@ async def on_interaction(interaction):
             guild_id = interaction.guild.id
             if guild_id in guild_queues:
                 guild_queues[guild_id].clear()
-        elif custom_id == "pause_button":
+        elif interaction.data['custom_id'] == "pause_button":
             await interaction.response.send_message("Pausing the song...", ephemeral=True)
             vc = interaction.guild.voice_client
             if vc and vc.is_playing():
                 vc.pause()
-        elif custom_id == "resume_button":
+        elif interaction.data['custom_id'] == "resume_button":
             await interaction.response.send_message("Resuming the song...", ephemeral=True)
             vc = interaction.guild.voice_client
             if vc and vc.is_paused():
                 vc.resume()
-        elif custom_id == "skip_button":
+        elif interaction.data['custom_id'] == "skip_button":
             await interaction.response.send_message("Skipping the song...", ephemeral=True)
             vc = interaction.guild.voice_client
             if vc and vc.is_playing():
                 vc.stop()
             await bot.get_cog("MusicBot").play_next(interaction.guild.id)
-        elif custom_id == "queue_button":
+        elif interaction.data['custom_id'] == "queue_button":
             guild_id = interaction.guild.id
             if guild_id in guild_queues and guild_queues[guild_id]:
-                queue_list = "\n.join([f'{title} - {duration//60}:{duration%60:02d}' for url, duration, title, thumbnail in guild_queues[guild_id]])"
+                queue_list = "\n".join([f"{title} - {duration//60}:{duration%60:02d}" for url, duration, title, thumbnail in guild_queues[guild_id]])
                 await interaction.response.send_message(f"Current queue:\n{queue_list}", ephemeral=True)
             else:
                 await interaction.response.send_message("The queue is empty.", ephemeral=True)
