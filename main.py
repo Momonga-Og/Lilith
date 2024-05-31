@@ -204,8 +204,8 @@ class MusicBot(commands.Cog):
         # If not currently playing, start playing the next song
         if not vc.is_playing():
             await self.play_next(guild_id)
-
-        await interaction.followup.send("Added song to the queue and will play it soon.", ephemeral=True)
+        else:
+            await interaction.followup.send("Added song to the queue and will play it after the current song.", ephemeral=True)
 
         # Register song information
         user_id = interaction.user.id
@@ -323,7 +323,8 @@ async def on_ready():
 @bot.event
 async def on_interaction(interaction):
     if interaction.type == discord.InteractionType.component:
-        if interaction.data['custom_id'] == "stop_button":
+        custom_id = interaction.data['custom_id']
+        if custom_id == "stop_button":
             await interaction.response.send_message("Stopping the song...", ephemeral=True)
             vc = interaction.guild.voice_client
             if vc and vc.is_playing():
@@ -331,26 +332,26 @@ async def on_interaction(interaction):
             guild_id = interaction.guild.id
             if guild_id in guild_queues:
                 guild_queues[guild_id].clear()
-        elif interaction.data['custom_id'] == "pause_button":
+        elif custom_id == "pause_button":
             await interaction.response.send_message("Pausing the song...", ephemeral=True)
             vc = interaction.guild.voice_client
             if vc and vc.is_playing():
                 vc.pause()
-        elif interaction.data['custom_id'] == "resume_button":
+        elif custom_id == "resume_button":
             await interaction.response.send_message("Resuming the song...", ephemeral=True)
             vc = interaction.guild.voice_client
             if vc and vc.is_paused():
                 vc.resume()
-        elif interaction.data['custom_id'] == "skip_button":
+        elif custom_id == "skip_button":
             await interaction.response.send_message("Skipping the song...", ephemeral=True)
             vc = interaction.guild.voice_client
             if vc and vc.is_playing():
                 vc.stop()
             await bot.get_cog("MusicBot").play_next(interaction.guild.id)
-        elif interaction.data['custom_id'] == "queue_button":
+        elif custom_id == "queue_button":
             guild_id = interaction.guild.id
             if guild_id in guild_queues and guild_queues[guild_id]:
-                queue_list = "\n".join([f"{title} - {duration//60}:{duration%60:02d}" for url, duration, title, thumbnail in guild_queues[guild_id]])
+                queue_list = "\n.join([f'{title} - {duration//60}:{duration%60:02d}' for url, duration, title, thumbnail in guild_queues[guild_id]])"
                 await interaction.response.send_message(f"Current queue:\n{queue_list}", ephemeral=True)
             else:
                 await interaction.response.send_message("The queue is empty.", ephemeral=True)
