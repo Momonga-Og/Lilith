@@ -1,11 +1,5 @@
-discord.py
-yt-dlp
-discord-py-interactions
 pynacl
+discord.py
+discord-components
+yt-dlp
 python-dotenv
-matplotlib
-numpy
-Pillow
-scipy
-logging
-discord_components
