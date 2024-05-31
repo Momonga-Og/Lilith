@@ -13,6 +13,7 @@ logger.addHandler(file_handler)
 import discord
 from discord.ext import commands
 from discord import app_commands
+from discord_components import Button, ButtonStyle, InteractionType, DiscordComponents
 import asyncio
 import yt_dlp
 import os
@@ -27,6 +28,9 @@ intents.message_content = True
 intents.voice_states = True  # Enable voice state intent
 bot = commands.Bot(command_prefix='!', intents=intents)
 tree = bot.tree
+
+# Initialize discord components
+DiscordComponents(bot)
 
 # Dictionaries to manage guild queues and leave timers
 guild_queues = {}
@@ -104,7 +108,7 @@ class MusicBot(commands.Cog):
                 logger.error(f"Voice client is not connected for guild {guild_id}")
                 return
 
-            url, duration, title, thumbnail = guild_queues[guild_id].pop(0)
+            url, duration, title, thumbnail = guild_queues[guild_id][0]
             loop = asyncio.get_event_loop()
 
             try:
@@ -112,11 +116,15 @@ class MusicBot(commands.Cog):
                 if filename is None:
                     channel = self.bot.get_channel(self.channel_map[guild_id])
                     await channel.send(f"Failed to download audio from {url}")
+                    guild_queues[guild_id].pop(0)  # Remove the failed song from the queue
+                    await self.play_next(guild_id)
                     return
 
                 def after_playing(error):
                     if error:
                         logger.error(f"Error occurred: {error}")
+                    else:
+                        guild_queues[guild_id].pop(0)  # Remove the song from the queue after playing
                     fut = asyncio.run_coroutine_threadsafe(self.play_next(guild_id), self.bot.loop)
                     try:
                         fut.result()
@@ -125,8 +133,19 @@ class MusicBot(commands.Cog):
 
                 embed = discord.Embed(title="Now Playing", description=title, color=discord.Color.blue())
                 embed.set_thumbnail(url=thumbnail)
+                embed.add_field(name="Requested By", value=self.bot.get_user(interaction.user.id).mention)
+                embed.add_field(name="Duration", value=f"{duration//60}:{duration%60:02d}")
+
                 channel = self.bot.get_channel(self.channel_map[guild_id])
-                await channel.send(embed=embed)
+                await channel.send(embed=embed, components=[
+                    [
+                        Button(style=ButtonStyle.red, label="Stop"),
+                        Button(style=ButtonStyle.blue, label="Pause"),
+                        Button(style=ButtonStyle.green, label="Resume"),
+                        Button(style=ButtonStyle.blue, label="Skip"),
+                        Button(style=ButtonStyle.blue, label="Queue"),
+                    ]
+                ])
 
                 vc.play(discord.FFmpegPCMAudio(executable="ffmpeg", source=filename), after=after_playing)
             except Exception as e:
@@ -305,6 +324,40 @@ async def on_ready():
         await bot.add_cog(MusicBot(bot))
     await tree.sync()
     logger.info(f'Logged in as {bot.user}!')
+
+@bot.event
+async def on_button_click(interaction):
+    if interaction.component.label == "Stop":
+        await interaction.respond(type=InteractionType.ChannelMessageWithSource, content="Stopping the song...")
+        vc = interaction.guild.voice_client
+        if vc and vc.is_playing():
+            vc.stop()
+        guild_id = interaction.guild.id
+        if guild_id in guild_queues:
+            guild_queues[guild_id].clear()
+    elif interaction.component.label == "Pause":
+        await interaction.respond(type=InteractionType.ChannelMessageWithSource, content="Pausing the song...")
+        vc = interaction.guild.voice_client
+        if vc and vc.is_playing():
+            vc.pause()
+    elif interaction.component.label == "Resume":
+        await interaction.respond(type=InteractionType.ChannelMessageWithSource, content="Resuming the song...")
+        vc = interaction.guild.voice_client
+        if vc and vc.is_paused():
+            vc.resume()
+    elif interaction.component.label == "Skip":
+        await interaction.respond(type=InteractionType.ChannelMessageWithSource, content="Skipping the song...")
+        vc = interaction.guild.voice_client
+        if vc and vc.is_playing():
+            vc.stop()
+        await bot.get_cog("MusicBot").play_next(interaction.guild.id)
+    elif interaction.component.label == "Queue":
+        guild_id = interaction.guild.id
+        if guild_id in guild_queues and guild_queues[guild_id]:
+            queue_list = "\n".join([f"{title} - {duration//60}:{duration%60:02d}" for url, duration, title, thumbnail in guild_queues[guild_id]])
+            await interaction.respond(type=InteractionType.ChannelMessageWithSource, content=f"Current queue:\n{queue_list}")
+        else:
+            await interaction.respond(type=InteractionType.ChannelMessageWithSource, content="The queue is empty.")
 
 # Run the bot with the token from the environment variable
 bot.run(os.getenv('DISCORD_BOT_TOKEN'))
