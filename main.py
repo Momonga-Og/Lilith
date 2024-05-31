@@ -88,7 +88,7 @@ class MusicBot(commands.Cog):
 
     async def join_channel(self, interaction: discord.Interaction):
         if interaction.user.voice is None:
-            await interaction.response.send_message("You need to be in a voice channel to use this command.")
+            await interaction.response.send_message("You need to be in a voice channel to use this command.", ephemeral=True)
             return None
         channel = interaction.user.voice.channel
         if interaction.guild.voice_client is None:
@@ -185,7 +185,7 @@ class MusicBot(commands.Cog):
     @app_commands.command(name="play", description="Play a song")
     @app_commands.describe(url="The URL of the song to play")
     async def play(self, interaction: discord.Interaction, url: str):
-        await interaction.response.defer()
+        await interaction.response.send_message("Processing...", ephemeral=True)
 
         vc = await self.join_channel(interaction)
         if vc is None:
@@ -218,7 +218,7 @@ class MusicBot(commands.Cog):
     @app_commands.command(name="loop", description="Loop a song 10 times")
     @app_commands.describe(url="The URL of the song to loop")
     async def loop(self, interaction: discord.Interaction, url: str):
-        await interaction.response.defer()
+        await interaction.response.send_message("Processing...", ephemeral=True)
 
         vc = await self.join_channel(interaction)
         if vc is None:
