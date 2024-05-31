@@ -130,8 +130,6 @@ class MusicBot(commands.Cog):
 
                 embed = discord.Embed(title="Now Playing", description=title, color=discord.Color.blue())
                 embed.set_thumbnail(url=thumbnail)
-                # Assuming the requester information is stored elsewhere as interaction is not available here
-                # embed.add_field(name="Requested By", value=self.bot.get_user(interaction.user.id).mention)
                 embed.add_field(name="Duration", value=f"{duration//60}:{duration%60:02d}")
 
                 view = View()
@@ -186,12 +184,17 @@ class MusicBot(commands.Cog):
     @app_commands.command(name="play", description="Play a song")
     @app_commands.describe(url="The URL of the song to play")
     async def play(self, interaction: discord.Interaction, url: str):
+        # Acknowledge the interaction immediately
         await interaction.response.send_message("Added song to the queue and will play it soon.", ephemeral=True)
+        
+        # Process the request in the background
+        await self.process_play_request(interaction, url)
 
+    async def process_play_request(self, interaction: discord.Interaction, url: str):
         vc = await self.join_channel(interaction)
         if vc is None:
             return
-        
+
         guild_id = interaction.guild.id
 
         # Ensure guild_id exists in guild_queues
@@ -202,7 +205,7 @@ class MusicBot(commands.Cog):
         guild_queues[guild_id].append((url, 0, 'Unknown title', ''))
 
         self.channel_map[guild_id] = interaction.channel.id
-        
+
         # If not currently playing, start playing the next song
         if not vc.is_playing():
             await self.play_next(guild_id)
@@ -217,8 +220,13 @@ class MusicBot(commands.Cog):
     @app_commands.command(name="loop", description="Loop a song 10 times")
     @app_commands.describe(url="The URL of the song to loop")
     async def loop(self, interaction: discord.Interaction, url: str):
+        # Acknowledge the interaction immediately
         await interaction.response.send_message("Added song to the queue to loop 10 times.", ephemeral=True)
+        
+        # Process the request in the background
+        await self.process_loop_request(interaction, url)
 
+    async def process_loop_request(self, interaction: discord.Interaction, url: str):
         vc = await self.join_channel(interaction)
         if vc is None:
             return
