@@ -308,7 +308,7 @@ class MusicBot(commands.Cog):
                 channel = self.bot.get_channel(self.channel_map[guild_id])
                 # Find out who caused the bot to be kicked
                 for other_member in before.channel.members:
-                    if other_member guild_permissions.move_members:
+                    if other_member.guild_permissions.move_members:
                         # We assume the user with the permission to move members is the one who kicked the bot
                         await channel.send(f"I was kicked from the voice channel by {other_member.display_name}.")
                         break
