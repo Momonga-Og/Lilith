@@ -135,11 +135,11 @@ class MusicBot(commands.Cog):
                 embed.add_field(name="Duration", value=f"{duration//60}:{duration%60:02d}")
 
                 view = View()
-                view.add_item(Button(label="Stop", style=ButtonStyle.red))
-                view.add_item(Button(label="Pause", style=ButtonStyle.blurple))
-                view.add_item(Button(label="Resume", style=ButtonStyle.green))
-                view.add_item(Button(label="Skip", style=ButtonStyle.blurple))
-                view.add_item(Button(label="Queue", style=ButtonStyle.blurple))
+                view.add_item(Button(label="Stop", style=discord.ButtonStyle.red))
+                view.add_item(Button(label="Pause", style=discord.ButtonStyle.blurple))
+                view.add_item(Button(label="Resume", style=discord.ButtonStyle.green))
+                view.add_item(Button(label="Skip", style=discord.ButtonStyle.blurple))
+                view.add_item(Button(label="Queue", style=discord.ButtonStyle.blurple))
 
                 channel = self.bot.get_channel(self.channel_map[guild_id])
                 await channel.send(embed=embed, view=view)
@@ -186,7 +186,7 @@ class MusicBot(commands.Cog):
     @app_commands.command(name="play", description="Play a song")
     @app_commands.describe(url="The URL of the song to play")
     async def play(self, interaction: discord.Interaction, url: str):
-        await interaction.response.defer()
+        await interaction.response.send_message("Added song to the queue and will play it soon.", ephemeral=True)
 
         vc = await self.join_channel(interaction)
         if vc is None:
@@ -206,8 +206,6 @@ class MusicBot(commands.Cog):
         # If not currently playing, start playing the next song
         if not vc.is_playing():
             await self.play_next(guild_id)
-        
-        await interaction.followup.send("Added song to the queue and will play it soon.")
 
         # Register song information
         user_id = interaction.user.id
@@ -219,7 +217,7 @@ class MusicBot(commands.Cog):
     @app_commands.command(name="loop", description="Loop a song 10 times")
     @app_commands.describe(url="The URL of the song to loop")
     async def loop(self, interaction: discord.Interaction, url: str):
-        await interaction.response.defer()
+        await interaction.response.send_message("Added song to the queue to loop 10 times.", ephemeral=True)
 
         vc = await self.join_channel(interaction)
         if vc is None:
@@ -236,8 +234,6 @@ class MusicBot(commands.Cog):
 
         if not vc.is_playing():
             await self.play_next(guild_id)
-
-        await interaction.followup.send("Added song to the queue to loop 10 times.")
 
         # Register song information
         user_id = interaction.user.id
