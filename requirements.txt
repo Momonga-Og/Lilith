@@ -1,5 +1,4 @@
 pynacl
 discord.py
-discord-components
 yt-dlp
 python-dotenv
