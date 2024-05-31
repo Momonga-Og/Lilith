@@ -178,9 +178,12 @@ class MusicBot(commands.Cog):
         
         guild_id = interaction.guild.id
 
+        # Ensure guild_id exists in guild_queues
+        if guild_id not in guild_queues:
+            guild_queues[guild_id] = []
+
         # Clear current queue and stop ongoing loop
-        if guild_id in guild_queues:
-            guild_queues[guild_id].clear()
+        guild_queues[guild_id].clear()
 
         if vc.is_playing():
             vc.stop()
@@ -305,6 +308,7 @@ async def on_ready():
         await bot.add_cog(MusicBot(bot))
     await tree.sync()
     logger.info(f'Logged in as {bot.user}!')
-
+    
 # Run the bot with the token from the environment variable
 bot.run(os.getenv('DISCORD_BOT_TOKEN'))
+
