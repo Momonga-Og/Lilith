@@ -182,15 +182,14 @@ class MusicBot(commands.Cog):
         if guild_id not in guild_queues:
             guild_queues[guild_id] = []
 
-        # Clear current queue and stop ongoing loop
-        if vc.is_playing():
-            vc.stop()
-        
+        # Append new song to the queue
         guild_queues[guild_id].append((url, 0, 'Unknown title', ''))
 
         self.channel_map[guild_id] = interaction.channel.id
         
-        await self.play_next(guild_id)
+        # If not currently playing, start playing the next song
+        if not vc.is_playing():
+            await self.play_next(guild_id)
         
         await interaction.followup.send("Added song to the queue and will play it soon.")
 
@@ -295,7 +294,7 @@ class MusicBot(commands.Cog):
                 channel = self.bot.get_channel(self.channel_map[guild_id])
                 # Find out who caused the bot to be kicked
                 for other_member in before.channel.members:
-                    if other_member.guild_permissions.move_members:
+                    if other_member.guild_permissions move_members:
                         # We assume the user with the permission to move members is the one who kicked the bot
                         await channel.send(f"I was kicked from the voice channel by {other_member.display_name}.")
                         break
