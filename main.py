@@ -1,15 +1,4 @@
 import logging
-
-# Set up logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s:%(levelname)s:%(name)s:%(message)s')
-file_handler = logging.FileHandler('bot.log')
-file_handler.setLevel(logging.INFO)
-formatter = logging.Formatter('%(asctime)s:%(levelname)s:%(name)s:%(message)s')
-file_handler.setFormatter(formatter)
-# Initialize the logger
-logger = logging.getLogger(__name__)
-logger.addHandler(file_handler)
-
 import discord
 from discord.ext import commands
 from discord import app_commands
@@ -19,6 +8,17 @@ import yt_dlp
 import os
 from dotenv import load_dotenv
 import json
+
+# Set up logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s:%(levelname)s:%(name)s:%(message)s')
+file_handler = logging.FileHandler('bot.log')
+file_handler.setLevel(logging.INFO)
+formatter = logging.Formatter('%(asctime)s:%(levelname)s:%(name)s:%(message)s')
+file_handler.setFormatter(formatter)
+
+# Initialize the logger
+logger = logging.getLogger(__name__)
+logger.addHandler(file_handler)
 
 load_dotenv()  # Load environment variables from .env file
 
@@ -133,11 +133,11 @@ class MusicBot(commands.Cog):
                 embed.add_field(name="Duration", value=f"{duration//60}:{duration%60:02d}")
 
                 view = View()
-                view.add_item(Button(label="Stop", style=discord.ButtonStyle.red))
-                view.add_item(Button(label="Pause", style=discord.ButtonStyle.blurple))
-                view.add_item(Button(label="Resume", style=discord.ButtonStyle.green))
-                view.add_item(Button(label="Skip", style=discord.ButtonStyle.blurple))
-                view.add_item(Button(label="Queue", style=discord.ButtonStyle.blurple))
+                view.add_item(Button(label="Stop", style=discord.ButtonStyle.red, custom_id="stop_button"))
+                view.add_item(Button(label="Pause", style=discord.ButtonStyle.blurple, custom_id="pause_button"))
+                view.add_item(Button(label="Resume", style=discord.ButtonStyle.green, custom_id="resume_button"))
+                view.add_item(Button(label="Skip", style=discord.ButtonStyle.blurple, custom_id="skip_button"))
+                view.add_item(Button(label="Queue", style=discord.ButtonStyle.blurple, custom_id="queue_button"))
 
                 channel = self.bot.get_channel(self.channel_map[guild_id])
                 await channel.send(embed=embed, view=view)
@@ -323,7 +323,7 @@ async def on_ready():
 @bot.event
 async def on_interaction(interaction):
     if interaction.type == discord.InteractionType.component:
-        if interaction.component.label == "Stop":
+        if interaction.data['custom_id'] == "stop_button":
             await interaction.response.send_message("Stopping the song...", ephemeral=True)
             vc = interaction.guild.voice_client
             if vc and vc.is_playing():
@@ -331,23 +331,23 @@ async def on_interaction(interaction):
             guild_id = interaction.guild.id
             if guild_id in guild_queues:
                 guild_queues[guild_id].clear()
-        elif interaction.component.label == "Pause":
+        elif interaction.data['custom_id'] == "pause_button":
             await interaction.response.send_message("Pausing the song...", ephemeral=True)
             vc = interaction.guild.voice_client
             if vc and vc.is_playing():
                 vc.pause()
-        elif interaction.component.label == "Resume":
+        elif interaction.data['custom_id'] == "resume_button":
             await interaction.response.send_message("Resuming the song...", ephemeral=True)
             vc = interaction.guild.voice_client
             if vc and vc.is_paused():
                 vc.resume()
-        elif interaction.component.label == "Skip":
+        elif interaction.data['custom_id'] == "skip_button":
             await interaction.response.send_message("Skipping the song...", ephemeral=True)
             vc = interaction.guild.voice_client
             if vc and vc.is_playing():
                 vc.stop()
             await bot.get_cog("MusicBot").play_next(interaction.guild.id)
-        elif interaction.component.label == "Queue":
+        elif interaction.data['custom_id'] == "queue_button":
             guild_id = interaction.guild.id
             if guild_id in guild_queues and guild_queues[guild_id]:
                 queue_list = "\n".join([f"{title} - {duration//60}:{duration%60:02d}" for url, duration, title, thumbnail in guild_queues[guild_id]])
