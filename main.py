@@ -19,7 +19,6 @@ import os
 from dotenv import load_dotenv
 import json
 
-
 load_dotenv()  # Load environment variables from .env file
 
 # Initialize Discord bot
@@ -178,15 +177,19 @@ class MusicBot(commands.Cog):
             return
         
         guild_id = interaction.guild.id
-        if guild_id not in guild_queues:
-            guild_queues[guild_id] = []
+
+        # Clear current queue and stop ongoing loop
+        if guild_id in guild_queues:
+            guild_queues[guild_id].clear()
+
+        if vc.is_playing():
+            vc.stop()
 
         guild_queues[guild_id].append((url, 0, 'Unknown title', ''))
 
         self.channel_map[guild_id] = interaction.channel.id
         
-        if not vc.is_playing():
-            await self.play_next(guild_id)
+        await self.play_next(guild_id)
         
         await interaction.followup.send("Added song to the queue and will play it soon.")
 
