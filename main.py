@@ -183,11 +183,9 @@ class MusicBot(commands.Cog):
             guild_queues[guild_id] = []
 
         # Clear current queue and stop ongoing loop
-        guild_queues[guild_id].clear()
-
         if vc.is_playing():
             vc.stop()
-
+        
         guild_queues[guild_id].append((url, 0, 'Unknown title', ''))
 
         self.channel_map[guild_id] = interaction.channel.id
@@ -311,4 +309,3 @@ async def on_ready():
     
 # Run the bot with the token from the environment variable
 bot.run(os.getenv('DISCORD_BOT_TOKEN'))
-
