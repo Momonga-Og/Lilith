@@ -88,7 +88,7 @@ class MusicBot(commands.Cog):
 
     async def join_channel(self, interaction: discord.Interaction):
         if interaction.user.voice is None:
-            await interaction.followup.send("You need to be in a voice channel to use this command.", ephemeral=True)
+            await interaction.response.send_message("You need to be in a voice channel to use this command.", ephemeral=True)
             return None
         channel = interaction.user.voice.channel
         if interaction.guild.voice_client is None:
@@ -122,11 +122,11 @@ class MusicBot(commands.Cog):
                         logger.error(f"Error occurred: {error}")
                     else:
                         guild_queues[guild_id].pop(0)  # Remove the song from the queue after playing
-                        fut = asyncio.run_coroutine_threadsafe(self.play_next(guild_id), self.bot.loop)
-                        try:
-                            fut.result()
-                        except Exception as e:
-                            logger.error(f"Error in play_next: {e}")
+                    fut = asyncio.run_coroutine_threadsafe(self.play_next(guild_id), self.bot.loop)
+                    try:
+                        fut.result()
+                    except Exception as e:
+                        logger.error(f"Error in play_next: {e}")
 
                 embed = discord.Embed(title="Now Playing", description=title, color=discord.Color.blue())
                 embed.set_thumbnail(url=thumbnail)
@@ -184,7 +184,7 @@ class MusicBot(commands.Cog):
     @app_commands.command(name="play", description="Play a song")
     @app_commands.describe(url="The URL of the song to play")
     async def play(self, interaction: discord.Interaction, url: str):
-        await interaction.response.defer(ephemeral=True)
+        await interaction.response.send_message("Processing your request...", ephemeral=True)
 
         vc = await self.join_channel(interaction)
         if vc is None:
@@ -204,8 +204,6 @@ class MusicBot(commands.Cog):
         # If not currently playing, start playing the next song
         if not vc.is_playing():
             await self.play_next(guild_id)
-        else:
-            await interaction.followup.send("Added song to the queue and will play it after the current song.", ephemeral=True)
 
         # Register song information
         user_id = interaction.user.id
@@ -217,7 +215,7 @@ class MusicBot(commands.Cog):
     @app_commands.command(name="loop", description="Loop a song 10 times")
     @app_commands.describe(url="The URL of the song to loop")
     async def loop(self, interaction: discord.Interaction, url: str):
-        await interaction.response.defer(ephemeral=True)
+        await interaction.response.send_message("Processing your request...", ephemeral=True)
 
         vc = await self.join_channel(interaction)
         if vc is None:
@@ -234,8 +232,6 @@ class MusicBot(commands.Cog):
 
         if not vc.is_playing():
             await self.play_next(guild_id)
-
-        await interaction.followup.send("Added song to the queue to loop 10 times.", ephemeral=True)
 
         # Register song information
         user_id = interaction.user.id
