@@ -32,4 +32,4 @@ jobs:
       env:
         DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
       run: |
-        python your_bot_script.py  # Replace with the entry point of your bot
+        python main.py  # Replace with the entry point of your bot
