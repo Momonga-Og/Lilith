@@ -7,7 +7,6 @@ on:
 
 jobs:
   build:
-
     runs-on: ubuntu-latest
 
     steps:
@@ -17,17 +16,18 @@ jobs:
     - name: Set up Python
       uses: actions/setup-python@v2
       with:
-        python-version: '3.8'
+        python-version: '3.9'  # You can specify the version you need
 
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
         pip install -r requirements.txt
 
-    - name: Install FFmpeg
-      run: sudo apt-get install ffmpeg
+    - name: Install ffmpeg
+      run: sudo apt-get install -y ffmpeg
 
-    - name: Run the bot
+    - name: Run bot
       env:
         DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
-      run: python main.py
+      run: |
+        python your_bot_script.py  # Replace with the entry point of your bot
