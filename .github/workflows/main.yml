@@ -16,7 +16,7 @@ jobs:
     - name: Set up Python
       uses: actions/setup-python@v2
       with:
-        python-version: '3.9'  # You can specify the version you need
+        python-version: '3.9'  # Ensure this matches your bot's requirements
 
     - name: Update and Install ffmpeg
       run: |
@@ -32,4 +32,4 @@ jobs:
       env:
         DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
       run: |
-        python main.py  # Replace with the entry point of your bot
+        python main.py  # Replace with the correct entry point of your bot
