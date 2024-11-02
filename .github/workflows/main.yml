@@ -1,4 +1,4 @@
-name: Deploy Discord Bot
+name: Deploy Discord Bot 
 
 on:
   push:
@@ -18,10 +18,20 @@ jobs:
       with:
         python-version: '3.9'  # Ensure this matches your bot's requirements
 
-    - name: Update and Install ffmpeg
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y ffmpeg --fix-missing
+    - name: Update package lists
+      run: sudo apt-get update
+
+    - name: Install ffmpeg (optional)
+      run: sudo apt-get install -y ffmpeg --fix-missing
+      if: needs-ffmpeg # Add a condition to avoid installing if not needed
+
+    - name: Cache dependencies
+      uses: actions/cache@v2
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
 
     - name: Install Python dependencies
       run: |
@@ -31,5 +41,7 @@ jobs:
     - name: Run bot
       env:
         DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
-      run: |
-        python main.py  # Replace with the correct entry point of your bot
+      run: python main.py  # Replace with the correct entry point of your bot
+
+      # Optional: Add error handling (example)
+      # continue-on-error: true  # This allows the workflow to continue even if this step fails
