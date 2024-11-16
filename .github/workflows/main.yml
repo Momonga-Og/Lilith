@@ -9,55 +9,52 @@ on:
   workflow_dispatch:  # Allows manual triggering of the workflow
 
 jobs:
-  build:
+  deploy-bot:
     runs-on: ubuntu-latest
 
     steps:
     # Step 1: Checkout repository
     - name: Checkout repository
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
 
     # Step 2: Set up Python environment
     - name: Set up Python
-      uses: actions/setup-python@v2
+      uses: actions/setup-python@v4
       with:
         python-version: '3.9'  # Ensure this matches your bot's requirements
 
-    # Step 3: Update package lists (necessary for installing packages)
-    - name: Update package lists
-      run: sudo apt-get update
-
-    # Step 4: Install ffmpeg if necessary
-    - name: Install ffmpeg (optional)
-      run: sudo apt-get install -y ffmpeg --fix-missing
-      if: ${{ secrets.INSTALL_FFMPEG == 'true' }}  # Condition to install if needed
-
-    # Step 5: Cache dependencies
+    # Step 3: Cache dependencies
     - name: Cache dependencies
-      uses: actions/cache@v2
+      uses: actions/cache@v3
       with:
         path: ~/.cache/pip
         key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
         restore-keys: |
           ${{ runner.os }}-pip-
 
-    # Step 6: Install Python dependencies with error handling
-    - name: Install Python dependencies
+    # Step 4: Install Python dependencies
+    - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install -r requirements.txt || echo "Dependency installation failed"
-      continue-on-error: true  # Allows workflow to proceed for debugging
+        pip install -r requirements.txt
+      env:
+        DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}  # Ensure access during installs
 
-    # Step 7: Run the bot in background
-    - name: Run bot
+    # Step 5: Install ffmpeg (if needed)
+    - name: Install ffmpeg
+      run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      if: ${{ secrets.INSTALL_FFMPEG == 'true' }}  # Install only if required
+
+    # Step 6: Run the bot
+    - name: Run the bot
       env:
         DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
       run: |
-        nohup python main.py &  # Run in background
-        sleep 30  # Keep the process alive briefly to ensure startup
-      continue-on-error: true  # Continue if the bot doesn't start, for debugging
+        nohup python main.py > bot_output.log 2>&1 &
+        sleep 10  # Ensure startup stability
+      continue-on-error: false  # Fail if the bot doesn't start
 
-    # Optional: Notify on failure
+    # Step 7: Notify on failure (optional)
     - name: Notify on failure
       if: failure()
       run: echo "Bot deployment failed. Please check the logs."
