@@ -8,6 +8,7 @@ import uuid
 import subprocess
 import pygame
 import logging
+from time import time
 
 # Set up logging to log every step the bot does
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -48,6 +49,28 @@ def reencode_mp3(input_path, output_path):
 # --- Function to Check Downloaded File Size ---
 def check_file_size(file_path):
     return os.path.getsize(file_path)
+
+# --- Function to Download the File ---
+def download_file(url, file_path, retries=3):
+    try:
+        # Attempt to download the file with retries
+        for attempt in range(retries):
+            logging.info(f"Downloading file from {url}, attempt {attempt + 1}")
+            response = requests.get(url, stream=True, timeout=30)
+            if response.status_code == 200:
+                with open(file_path, "wb") as f:
+                    for chunk in response.iter_content(chunk_size=8192):
+                        f.write(chunk)
+                logging.info(f"Successfully downloaded file: {file_path}")
+                return True
+            else:
+                logging.error(f"Failed to download. Status code: {response.status_code}")
+            if attempt < retries - 1:
+                logging.info("Retrying download...")
+        return False
+    except requests.RequestException as e:
+        logging.error(f"Error downloading the file: {e}")
+        return False
 
 # --- Function to Play Next Song ---
 async def play_next(ctx):
@@ -129,35 +152,28 @@ async def play(interaction: discord.Interaction, url: str):
         audio_url = data["link"]
 
         logging.info(f"Fetching audio from: {audio_url}")
-        download_response = requests.get(audio_url, stream=True)
+        file_path = os.path.join(TEMP_FOLDER, f"{uuid.uuid4()}.mp3")
 
-        # If the request was successful, proceed to download the audio
-        if download_response.status_code == 200:
-            title = data.get("title", "Unknown Title")
-            file_path = os.path.join(TEMP_FOLDER, f"{uuid.uuid4()}.mp3")
+        # Download the file
+        if not download_file(audio_url, file_path):
+            await interaction.followup.send("❌ Failed to download the audio file.")
+            return
 
-            # Download the file
-            with open(file_path, "wb") as f:
-                for chunk in download_response.iter_content(chunk_size=8192):
-                    f.write(chunk)
-            logging.info(f"Downloaded file: {file_path}")
+        title = data.get("title", "Unknown Title")
 
-            # Ensure the file size is reasonable before proceeding
-            if check_file_size(file_path) < 1024 * 1024:
-                logging.warning(f"File for {title} is too small to be a valid audio file.")
-                await interaction.followup.send(f"❌ The file for **{title}** is too small to be a valid audio file.")
-                os.remove(file_path)
-                return
+        # Ensure the file size is reasonable before proceeding
+        if check_file_size(file_path) < 1024 * 1024:
+            logging.warning(f"File for {title} is too small to be a valid audio file.")
+            await interaction.followup.send(f"❌ The file for **{title}** is too small to be a valid audio file.")
+            os.remove(file_path)
+            return
 
-            # Add to queue and play
-            music_queue.append({"file_path": file_path, "title": title})
-            await interaction.followup.send(f"✅ Added **{title}** to the queue.")
+        # Add to queue and play
+        music_queue.append({"file_path": file_path, "title": title})
+        await interaction.followup.send(f"✅ Added **{title}** to the queue.")
 
-            if not pygame.mixer.music.get_busy():
-                await play_next(interaction.channel)
-        else:
-            logging.error(f"Failed to download audio from {audio_url}")
-            await interaction.followup.send("❌ Could not download audio. Please try again later.")
+        if not pygame.mixer.music.get_busy():
+            await play_next(interaction.channel)
 
     except Exception as e:
         logging.error(f"Error occurred: {e}")
