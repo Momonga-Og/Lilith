@@ -106,9 +106,12 @@ async def play(interaction: discord.Interaction, url: str):
         # Send the request to the new API with the provided URL
         querystring = {"url": url}
         response = requests.get(YOUTUBE_API_URL, headers=HEADERS, params=querystring)
-        data = response.json()
+
+        # Print the raw response for debugging purposes
+        print(f"API Response: {response.json()}")  # Debugging line
 
         # Check if the API returned a valid audio URL
+        data = response.json()
         if "link" not in data:
             await interaction.followup.send("❌ Could not fetch audio for this link.")
             return
