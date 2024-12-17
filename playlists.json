@@ -1,1 +1,51 @@
+{
+  "cookies": [
+    {
+      "domain": ".youtube.com",
+      "include_subdomains": true,
+      "path": "/",
+      "secure": true,
+      "expiration": 1746656338,
+      "name": "VISITOR_INFO1_LIVE",
+      "value": "ilh75_FT6vs"
+    },
+    {
+      "domain": ".youtube.com",
+      "include_subdomains": true,
+      "path": "/",
+      "secure": true,
+      "expiration": 1746656338,
+      "name": "VISITOR_PRIVACY_METADATA",
+      "value": "CgJNQRIEGgAgUQ%3D%3D"
+    },
+    {
+      "domain": ".youtube.com",
+      "include_subdomains": true,
+      "path": "/",
+      "secure": false,
+      "expiration": 0,
+      "name": "YSC",
+      "value": "wUOcCwXoXJg"
+    },
+    {
+      "domain": ".youtube.com",
+      "include_subdomains": true,
+      "path": "/",
+      "secure": false,
+      "expiration": 1763484417,
+      "name": "HSID",
+      "value": "Alx0hkECMDAfuk0Zq"
+    },
+    {
+      "domain": ".youtube.com",
+      "include_subdomains": true,
+      "path": "/",
+      "secure": true,
+      "expiration": 1763484417,
+      "name": "SSID",
+      "value": "ABNBpWZEazQv2H4SE"
+    },
+    ...
+  ]
+}
 
