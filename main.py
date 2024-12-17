@@ -4,8 +4,8 @@ from discord import app_commands
 import asyncio
 import requests
 import logging
-import uuid
-import os 
+import os
+
 # Set up logging to log every step the bot does
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
@@ -19,10 +19,6 @@ bot = commands.Bot(command_prefix="/", intents=intents)
 music_queue = []
 current_song = None
 voice_client = None
-TEMP_FOLDER = "./temp_music/"
-
-# Ensure temporary folder exists
-os.makedirs(TEMP_FOLDER, exist_ok=True)
 
 # New YouTube API configuration
 YOUTUBE_API_URL = "https://youtube-mp36.p.rapidapi.com/dl"
