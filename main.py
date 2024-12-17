@@ -2,7 +2,8 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 import asyncio
-import yt_dlp as youtube_dl
+import requests
+import os
 
 # Bot setup
 intents = discord.Intents.default()
@@ -16,15 +17,14 @@ music_queue = []
 current_song = None
 voice_client = None
 
+# Invidious API Instance
+INVIDIOUS_INSTANCE = "https://invidious.snopyta.org"  # Replace with a reliable Invidious instance
 
-# --- YouTube DL Options ---
-YDL_OPTIONS = {
-    'format': 'bestaudio/best',
-    'noplaylist': 'True'
-}
+# FFmpeg Options
 FFMPEG_OPTIONS = {
     'options': '-vn'
 }
+
 
 # --- Function to Play Next Song ---
 async def play_next(ctx):
@@ -64,24 +64,34 @@ async def play(interaction: discord.Interaction, search: str):
     else:
         voice_client = interaction.guild.voice_client
 
-    # Search for the song
-    with youtube_dl.YoutubeDL(YDL_OPTIONS) as ydl:
-        try:
-            info = ydl.extract_info(search, download=False)
-            if 'entries' in info:
-                info = info['entries'][0]
-        except Exception as e:
-            await interaction.followup.send(f"❌ Could not retrieve video: {e}")
-            return
+    try:
+        # Check if search is a URL or search query
+        if search.startswith("http"):
+            video_id = search.split("v=")[-1]  # Extract video ID from URL
+        else:
+            # Search YouTube via Invidious
+            search_url = f"{INVIDIOUS_INSTANCE}/api/v1/search?q={search}&type=video"
+            response = requests.get(search_url)
+            results = response.json()
 
-    url = info['url']
-    title = info['title']
-    music_queue.append({'url': url, 'title': title})
+            if not results:
+                await interaction.followup.send("❌ No results found for your query.")
+                return
 
-    await interaction.followup.send(f"✅ Added **{title}** to the queue.")
+            video_id = results[0]["videoId"]  # Use the first video result
+            title = results[0]["title"]
 
-    if not voice_client.is_playing():
-        await play_next(interaction.channel)
+        # Get video stream URL using Invidious API
+        video_url = f"{INVIDIOUS_INSTANCE}/latest_version?id={video_id}&itag=251"  # itag=251 for audio
+        music_queue.append({'url': video_url, 'title': title or f"Video {video_id}"})
+
+        await interaction.followup.send(f"✅ Added **{title}** to the queue.")
+
+        if not voice_client.is_playing():
+            await play_next(interaction.channel)
+
+    except Exception as e:
+        await interaction.followup.send(f"❌ Error retrieving video: {e}")
 
 
 # --- Command to Pause Music ---
@@ -145,6 +155,5 @@ async def on_ready():
 
 
 # Run the bot
-import os
 DISCORD_BOT_TOKEN = os.getenv("DISCORD_BOT_TOKEN")
 bot.run(DISCORD_BOT_TOKEN)
