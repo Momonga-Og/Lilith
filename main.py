@@ -2,8 +2,10 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 import asyncio
+import pygame
+import requests
 import os
-import yt_dlp
+import uuid
 
 # Bot setup
 intents = discord.Intents.default()
@@ -11,18 +13,26 @@ intents.message_content = True
 intents.voice_states = True
 bot = commands.Bot(command_prefix="/", intents=intents)
 
-# Global Variables for Music Queue and Player
+# Initialize Pygame Mixer
+pygame.mixer.init()
+
+# Global Variables for Music
 music_queue = []
 current_song = None
 voice_client = None
+TEMP_FOLDER = "./temp_music/"
 
-# FFmpeg Options
-FFMPEG_OPTIONS = {'options': '-vn'}
+# Ensure temporary folder exists
+os.makedirs(TEMP_FOLDER, exist_ok=True)
 
-# Path to your exported cookies file
-COOKIES_FILE = './playlists.json'
+# YouTube API configuration
+YOUTUBE_API_URL = "https://youtube-mp36.p.rapidapi.com/dl"
+HEADERS = {
+    "x-rapidapi-key": "5e6976078bmsheb89f5f8d17f7d4p1b5895jsnb31e587ad8cc",
+    "x-rapidapi-host": "youtube-mp36.p.rapidapi.com"
+}
 
-# --- Function to Play Next Song ---
+# --- Function to Download and Play Next Song ---
 async def play_next(ctx):
     global current_song, voice_client
 
@@ -30,25 +40,35 @@ async def play_next(ctx):
         next_song = music_queue.pop(0)
         current_song = next_song
 
-        url = next_song['url']
-        voice_client.play(
-            discord.FFmpegPCMAudio(url, **FFMPEG_OPTIONS),
-            after=lambda e: asyncio.run_coroutine_threadsafe(play_next(ctx), bot.loop)
-        )
-        await ctx.send(f"🎶 Now playing: **{next_song['title']}**")
+        file_path = next_song["file_path"]
+        title = next_song["title"]
+
+        # Play using pygame
+        pygame.mixer.music.load(file_path)
+        pygame.mixer.music.play()
+
+        await ctx.send(f"🎶 Now playing: **{title}**")
+
+        # Wait for the music to finish
+        while pygame.mixer.music.get_busy():
+            await asyncio.sleep(1)
+
+        # Cleanup and play next
+        os.remove(file_path)
+        await play_next(ctx)
     else:
         current_song = None
         await ctx.send("🎵 Queue is empty. Add more songs!")
 
 # --- Command to Play Music ---
-@bot.tree.command(name="play", description="Play a song from a URL")
-@app_commands.describe(url="Song URL from YouTube or SoundCloud")
+@bot.tree.command(name="play", description="Play a song from a YouTube link")
+@app_commands.describe(url="YouTube video URL")
 async def play(interaction: discord.Interaction, url: str):
     global voice_client
 
-    await interaction.response.defer()  # Defer response to prevent timeout
+    await interaction.response.defer()
 
-    # Connect to voice channel
+    # Check if user is in a voice channel
     if interaction.user.voice is None:
         await interaction.followup.send("❌ You must be in a voice channel to play music.")
         return
@@ -60,22 +80,31 @@ async def play(interaction: discord.Interaction, url: str):
         voice_client = interaction.guild.voice_client
 
     try:
-        # Extract audio info using yt_dlp and pass cookies
-        ydl_opts = {
-            'format': 'bestaudio',
-            'cookies': COOKIES_FILE  # Use cookies for authentication
-        }
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=False)
-            audio_url = info['url']
-            title = info.get('title', 'Unknown Title')
+        # Fetch audio download URL from YouTube API
+        video_id = url.split("v=")[-1]
+        querystring = {"id": video_id}
+        response = requests.get(YOUTUBE_API_URL, headers=HEADERS, params=querystring)
+        data = response.json()
 
-        # Add track to queue
-        music_queue.append({'url': audio_url, 'title': title})
+        if "link" not in data:
+            await interaction.followup.send("❌ Could not fetch audio for this link.")
+            return
+
+        audio_url = data["link"]
+        title = data["title"]
+        file_path = os.path.join(TEMP_FOLDER, f"{uuid.uuid4()}.mp3")
+
+        # Download the audio file
+        with requests.get(audio_url, stream=True) as r:
+            with open(file_path, "wb") as f:
+                for chunk in r.iter_content(chunk_size=8192):
+                    f.write(chunk)
+
+        # Add to queue and play
+        music_queue.append({"file_path": file_path, "title": title})
         await interaction.followup.send(f"✅ Added **{title}** to the queue.")
 
-        # Play if nothing is playing
-        if not voice_client.is_playing():
+        if not pygame.mixer.music.get_busy():
             await play_next(interaction.channel)
 
     except Exception as e:
@@ -86,27 +115,21 @@ async def play(interaction: discord.Interaction, url: str):
 async def stop(interaction: discord.Interaction):
     global music_queue
 
-    if voice_client:
-        voice_client.stop()
-        music_queue = []
-        await interaction.response.send_message("⏹️ Stopped the music and cleared the queue.")
-    else:
-        await interaction.response.send_message("❌ No music is playing.")
+    pygame.mixer.music.stop()
+    music_queue = []
+    await interaction.response.send_message("⏹️ Stopped the music and cleared the queue.")
 
 # --- Command to Skip Song ---
 @bot.tree.command(name="skip", description="Skip the current song")
 async def skip(interaction: discord.Interaction):
-    if voice_client and voice_client.is_playing():
-        voice_client.stop()
-        await interaction.response.send_message("⏭️ Skipped the current song.")
-    else:
-        await interaction.response.send_message("❌ No music is playing.")
+    pygame.mixer.music.stop()
+    await interaction.response.send_message("⏭️ Skipped the current song.")
 
 # --- Command to Pause Music ---
 @bot.tree.command(name="pause", description="Pause the current song")
 async def pause(interaction: discord.Interaction):
-    if voice_client and voice_client.is_playing():
-        voice_client.pause()
+    if pygame.mixer.music.get_busy():
+        pygame.mixer.music.pause()
         await interaction.response.send_message("⏸️ Paused the music.")
     else:
         await interaction.response.send_message("❌ No music is playing.")
@@ -114,8 +137,8 @@ async def pause(interaction: discord.Interaction):
 # --- Command to Resume Music ---
 @bot.tree.command(name="resume", description="Resume the paused song")
 async def resume(interaction: discord.Interaction):
-    if voice_client and voice_client.is_paused():
-        voice_client.resume()
+    if pygame.mixer.music.get_pos() != -1:
+        pygame.mixer.music.unpause()
         await interaction.response.send_message("▶️ Resumed the music.")
     else:
         await interaction.response.send_message("❌ No music is paused.")
