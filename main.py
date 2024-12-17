@@ -34,10 +34,10 @@ TEMP_FOLDER = "./temp_music/"
 os.makedirs(TEMP_FOLDER, exist_ok=True)
 
 # New YouTube API configuration
-YOUTUBE_API_URL = "https://youtube-mp310.p.rapidapi.com/download/mp3"
+YOUTUBE_API_URL = "https://youtube-mp36.p.rapidapi.com/dl"
 HEADERS = {
     "x-rapidapi-key": "5e6976078bmsheb89f5f8d17f7d4p1b5895jsnb31e587ad8cc",
-    "x-rapidapi-host": "youtube-mp310.p.rapidapi.com"
+    "x-rapidapi-host": "youtube-mp36.p.rapidapi.com"
 }
 
 # --- Function to Re-encode MP3 using FFmpeg ---
@@ -78,10 +78,6 @@ async def play_next(ctx):
         logging.info(f"Now playing: {title}")
         await ctx.send(f"🎶 Now playing: **{title}**")
 
-        # Dubbing the bot's action (you need to add TTS functionality here)
-        if voice_client:
-            voice_client.play(discord.FFmpegPCMAudio("path_to_tts.mp3"))  # TTS path to say 'Now Playing'
-
         # Wait for the music to finish
         while pygame.mixer.music.get_busy():
             await asyncio.sleep(1)
@@ -116,7 +112,7 @@ async def play(interaction: discord.Interaction, url: str):
 
     try:
         # Send the request to the new API with the provided URL
-        querystring = {"url": url}
+        querystring = {"id": url.split("v=")[-1]}  # Extract the video ID from the URL
         response = requests.get(YOUTUBE_API_URL, headers=HEADERS, params=querystring)
 
         # Print the raw response for debugging purposes
@@ -124,17 +120,16 @@ async def play(interaction: discord.Interaction, url: str):
 
         # Check if the API returned a valid audio URL
         data = response.json()
-        if "downloadUrl" not in data:
+        if "link" not in data:
             logging.error(f"Could not fetch audio for the URL: {url}")
             await interaction.followup.send("❌ Could not fetch audio for this link.")
             return
 
         # Get the actual audio download URL from the response
-        download_url = data["downloadUrl"]
+        audio_url = data["link"]
 
-        # Now, fetch the audio file from the `downloadUrl`
-        logging.info(f"Fetching audio from {download_url}")
-        download_response = requests.get(download_url, stream=True)
+        logging.info(f"Fetching audio from: {audio_url}")
+        download_response = requests.get(audio_url, stream=True)
 
         # If the request was successful, proceed to download the audio
         if download_response.status_code == 200:
@@ -161,7 +156,7 @@ async def play(interaction: discord.Interaction, url: str):
             if not pygame.mixer.music.get_busy():
                 await play_next(interaction.channel)
         else:
-            logging.error(f"Failed to download audio from {download_url}")
+            logging.error(f"Failed to download audio from {audio_url}")
             await interaction.followup.send("❌ Could not download audio. Please try again later.")
 
     except Exception as e:
