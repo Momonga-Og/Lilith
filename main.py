@@ -2,8 +2,8 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 import asyncio
-import requests
 import os
+from soundcloud_dl import SoundcloudDL
 
 # Bot setup
 intents = discord.Intents.default()
@@ -17,14 +17,11 @@ music_queue = []
 current_song = None
 voice_client = None
 
-# Invidious API Instance
-INVIDIOUS_INSTANCE = "https://vid.puffyan.us"
+# SoundCloud API
+SC_CLIENT = SoundcloudDL()
 
 # FFmpeg Options
-FFMPEG_OPTIONS = {
-    'options': '-vn'
-}
-
+FFMPEG_OPTIONS = {'options': '-vn'}
 
 # --- Function to Play Next Song ---
 async def play_next(ctx):
@@ -44,10 +41,9 @@ async def play_next(ctx):
         current_song = None
         await ctx.send("🎵 Queue is empty. Add more songs!")
 
-
 # --- Command to Play Music ---
-@bot.tree.command(name="play", description="Play a song from a URL or search by name")
-@app_commands.describe(search="YouTube URL or search query")
+@bot.tree.command(name="play", description="Play a song from SoundCloud")
+@app_commands.describe(search="SoundCloud track URL")
 async def play(interaction: discord.Interaction, search: str):
     global voice_client
 
@@ -65,34 +61,25 @@ async def play(interaction: discord.Interaction, search: str):
         voice_client = interaction.guild.voice_client
 
     try:
-        # Check if search is a URL or search query
-        if search.startswith("http"):
-            video_id = search.split("v=")[-1]  # Extract video ID from URL
-        else:
-            # Search YouTube via Invidious
-            search_url = f"{INVIDIOUS_INSTANCE}/api/v1/search?q={search}&type=video"
-            response = requests.get(search_url)
-            results = response.json()
+        # Get SoundCloud track details
+        track = await SC_CLIENT.get_track(search)
+        if not track:
+            await interaction.followup.send("❌ No track found.")
+            return
 
-            if not results:
-                await interaction.followup.send("❌ No results found for your query.")
-                return
-
-            video_id = results[0]["videoId"]  # Use the first video result
-            title = results[0]["title"]
-
-        # Get video stream URL using Invidious API
-        video_url = f"{INVIDIOUS_INSTANCE}/latest_version?id={video_id}&itag=251"  # itag=251 for audio
-        music_queue.append({'url': video_url, 'title': title or f"Video {video_id}"})
+        # Add track to queue
+        title = track["title"]
+        url = track["url"]
+        music_queue.append({'url': url, 'title': title})
 
         await interaction.followup.send(f"✅ Added **{title}** to the queue.")
 
+        # Play if nothing is playing
         if not voice_client.is_playing():
             await play_next(interaction.channel)
 
     except Exception as e:
-        await interaction.followup.send(f"❌ Error retrieving video: {e}")
-
+        await interaction.followup.send(f"❌ Error: {e}")
 
 # --- Command to Pause Music ---
 @bot.tree.command(name="pause", description="Pause the current song")
@@ -103,7 +90,6 @@ async def pause(interaction: discord.Interaction):
     else:
         await interaction.response.send_message("❌ No music is playing.")
 
-
 # --- Command to Resume Music ---
 @bot.tree.command(name="resume", description="Resume the paused song")
 async def resume(interaction: discord.Interaction):
@@ -112,7 +98,6 @@ async def resume(interaction: discord.Interaction):
         await interaction.response.send_message("▶️ Resumed the music.")
     else:
         await interaction.response.send_message("❌ No music is paused.")
-
 
 # --- Command to Stop Music ---
 @bot.tree.command(name="stop", description="Stop the music and clear the queue")
@@ -126,7 +111,6 @@ async def stop(interaction: discord.Interaction):
     else:
         await interaction.response.send_message("❌ No music is playing.")
 
-
 # --- Command to Skip Song ---
 @bot.tree.command(name="skip", description="Skip the current song")
 async def skip(interaction: discord.Interaction):
@@ -135,7 +119,6 @@ async def skip(interaction: discord.Interaction):
         await interaction.response.send_message("⏭️ Skipped the current song.")
     else:
         await interaction.response.send_message("❌ No music is playing.")
-
 
 # --- Command to View Queue ---
 @bot.tree.command(name="queue", description="View the music queue")
@@ -146,13 +129,11 @@ async def queue(interaction: discord.Interaction):
     else:
         await interaction.response.send_message("🎵 The music queue is empty.")
 
-
 # --- Event: On Ready ---
 @bot.event
 async def on_ready():
     await bot.tree.sync()  # Sync slash commands
     print(f"✅ Logged in as {bot.user}")
-
 
 # Run the bot
 DISCORD_BOT_TOKEN = os.getenv("DISCORD_BOT_TOKEN")
