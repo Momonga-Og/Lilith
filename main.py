@@ -18,7 +18,7 @@ current_song = None
 voice_client = None
 
 # Invidious API Instance
-INVIDIOUS_INSTANCE = "https://invidious.snopyta.org"  # Replace with a reliable Invidious instance
+INVIDIOUS_INSTANCE = "https://vid.puffyan.us"
 
 # FFmpeg Options
 FFMPEG_OPTIONS = {
