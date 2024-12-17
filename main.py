@@ -2,22 +2,15 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 import asyncio
-import pygame
 import requests
 import os
 import uuid
-
-# Use a dummy audio driver for headless environments
-os.environ["SDL_AUDIODRIVER"] = "dummy"
 
 # Bot setup
 intents = discord.Intents.default()
 intents.message_content = True
 intents.voice_states = True
 bot = commands.Bot(command_prefix="/", intents=intents)
-
-# Initialize Pygame Mixer
-pygame.mixer.init()
 
 # Global Variables for Music
 music_queue = []
@@ -46,14 +39,14 @@ async def play_next(ctx):
         file_path = next_song["file_path"]
         title = next_song["title"]
 
-        # Play using pygame
-        pygame.mixer.music.load(file_path)
-        pygame.mixer.music.play()
+        # Play using FFmpegPCMAudio
+        source = discord.FFmpegPCMAudio(file_path)
+        voice_client.play(source)
 
         await ctx.send(f"🎶 Now playing: **{title}**")
 
         # Wait for the music to finish
-        while pygame.mixer.music.get_busy():
+        while voice_client.is_playing():
             await asyncio.sleep(1)
 
         # Cleanup and play next
@@ -107,7 +100,7 @@ async def play(interaction: discord.Interaction, url: str):
         music_queue.append({"file_path": file_path, "title": title})
         await interaction.followup.send(f"✅ Added **{title}** to the queue.")
 
-        if not pygame.mixer.music.get_busy():
+        if not voice_client.is_playing():
             await play_next(interaction.channel)
 
     except Exception as e:
@@ -118,21 +111,24 @@ async def play(interaction: discord.Interaction, url: str):
 async def stop(interaction: discord.Interaction):
     global music_queue
 
-    pygame.mixer.music.stop()
+    voice_client.stop()
     music_queue = []
     await interaction.response.send_message("⏹️ Stopped the music and cleared the queue.")
 
 # --- Command to Skip Song ---
 @bot.tree.command(name="skip", description="Skip the current song")
 async def skip(interaction: discord.Interaction):
-    pygame.mixer.music.stop()
-    await interaction.response.send_message("⏭️ Skipped the current song.")
+    if voice_client and voice_client.is_playing():
+        voice_client.stop()
+        await interaction.response.send_message("⏭️ Skipped the current song.")
+    else:
+        await interaction.response.send_message("❌ No music is playing.")
 
 # --- Command to Pause Music ---
 @bot.tree.command(name="pause", description="Pause the current song")
 async def pause(interaction: discord.Interaction):
-    if pygame.mixer.music.get_busy():
-        pygame.mixer.music.pause()
+    if voice_client and voice_client.is_playing():
+        voice_client.pause()
         await interaction.response.send_message("⏸️ Paused the music.")
     else:
         await interaction.response.send_message("❌ No music is playing.")
@@ -140,8 +136,8 @@ async def pause(interaction: discord.Interaction):
 # --- Command to Resume Music ---
 @bot.tree.command(name="resume", description="Resume the paused song")
 async def resume(interaction: discord.Interaction):
-    if pygame.mixer.music.get_pos() != -1:
-        pygame.mixer.music.unpause()
+    if voice_client and voice_client.is_paused():
+        voice_client.resume()
         await interaction.response.send_message("▶️ Resumed the music.")
     else:
         await interaction.response.send_message("❌ No music is paused.")
