@@ -5,7 +5,7 @@ import asyncio
 import requests
 import logging
 import uuid
-
+import os 
 # Set up logging to log every step the bot does
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
