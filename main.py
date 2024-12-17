@@ -40,6 +40,10 @@ HEADERS = {
 def reencode_mp3(input_path, output_path):
     subprocess.run(["ffmpeg", "-i", input_path, "-codec:a", "libmp3lame", "-qscale:a", "2", output_path])
 
+# --- Function to Check Downloaded File Size ---
+def check_file_size(file_path):
+    return os.path.getsize(file_path)
+
 # --- Function to Play Next Song ---
 async def play_next(ctx):
     global current_song, voice_client
@@ -50,6 +54,12 @@ async def play_next(ctx):
 
         file_path = next_song["file_path"]
         title = next_song["title"]
+
+        # Check if the file size is reasonable (for example, it should be > 1MB)
+        if check_file_size(file_path) < 1024 * 1024:
+            await ctx.send(f"❌ The file is too small to be a valid audio file: **{title}**")
+            os.remove(file_path)
+            return
 
         # Re-encode the file to ensure compatibility
         reencoded_file = file_path.replace(".mp3", "_reencoded.mp3")
@@ -112,6 +122,12 @@ async def play(interaction: discord.Interaction, url: str):
             with open(file_path, "wb") as f:
                 for chunk in r.iter_content(chunk_size=8192):
                     f.write(chunk)
+
+        # Ensure the file size is reasonable before proceeding
+        if check_file_size(file_path) < 1024 * 1024:
+            await interaction.followup.send(f"❌ The file for **{title}** is too small to be a valid audio file.")
+            os.remove(file_path)
+            return
 
         # Add to queue and play
         music_queue.append({"file_path": file_path, "title": title})
