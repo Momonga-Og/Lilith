@@ -1,179 +1,150 @@
 import discord
-from discord import app_commands
 from discord.ext import commands
-import yt_dlp
+from discord import app_commands
 import asyncio
-import os
-import requests
+import yt_dlp as youtube_dl
 
-# ========= Configuration =========
-TOKEN = os.getenv('DISCORD_BOT_TOKEN')  # Fetch the bot token from the environment variable
-INVIDIOUS_INSTANCE = "https://invidious.snopyta.org"
-DOWNLOAD_FOLDER = "downloads"
-
-# ========= Global Variables =======
-queue = []
-current_track_index = -1  # Tracks the index of the current song in the queue
-voice_client = None
-
-# ========= Bot Setup ============
+# Bot setup
 intents = discord.Intents.default()
 intents.message_content = True
-bot = commands.Bot(command_prefix="!", intents=intents)
-tree = app_commands.CommandTree(bot)
+intents.voice_states = True
+
+bot = commands.Bot(command_prefix="/", intents=intents)
+
+# Global Variables for Music Queue and Player
+music_queue = []
+current_song = None
+voice_client = None
 
 
-def fetch_audio_url_from_invidious(search_query):
-    """
-    Fetch the audio URL using Invidious by searching with a query.
-    """
-    try:
-        print(f"[INFO] Searching for '{search_query}' on Invidious...")
-        response = requests.get(f"{INVIDIOUS_INSTANCE}/api/v1/search", params={"q": search_query, "type": "video"})
-        response.raise_for_status()
-        videos = response.json()
-        if videos:
-            video_id = videos[0]["videoId"]
-            print(f"[INFO] Found video: {videos[0]['title']} (ID: {video_id})")
-            return f"https://www.youtube.com/watch?v={video_id}"
-        else:
-            return None
-    except Exception as e:
-        print(f"[ERROR] Failed to search on Invidious: {e}")
-        return None
+# --- YouTube DL Options ---
+YDL_OPTIONS = {
+    'format': 'bestaudio/best',
+    'noplaylist': 'True'
+}
+FFMPEG_OPTIONS = {
+    'options': '-vn'
+}
+
+# --- Function to Play Next Song ---
+async def play_next(ctx):
+    global current_song, voice_client
+
+    if music_queue:
+        next_song = music_queue.pop(0)
+        current_song = next_song
+
+        url = next_song['url']
+        voice_client.play(
+            discord.FFmpegPCMAudio(url, **FFMPEG_OPTIONS),
+            after=lambda e: asyncio.run_coroutine_threadsafe(play_next(ctx), bot.loop)
+        )
+        await ctx.send(f"🎶 Now playing: **{next_song['title']}**")
+    else:
+        current_song = None
+        await ctx.send("🎵 Queue is empty. Add more songs!")
 
 
-async def play_next_song(ctx):
-    """
-    Play the next song in the queue.
-    """
-    global current_track_index, voice_client
-    current_track_index += 1
+# --- Command to Play Music ---
+@bot.tree.command(name="play", description="Play a song from a URL or search by name")
+@app_commands.describe(search="YouTube URL or search query")
+async def play(interaction: discord.Interaction, search: str):
+    global voice_client
 
-    if current_track_index >= len(queue):
-        await ctx.send("Queue finished. No more songs to play.")
-        current_track_index = -1  # Reset the queue
+    await interaction.response.defer()  # Defer response to prevent timeout
+
+    # Connect to voice channel
+    if interaction.user.voice is None:
+        await interaction.followup.send("❌ You must be in a voice channel to play music.")
         return
 
-    song_url = queue[current_track_index]
-    await play_song(ctx, song_url)
+    channel = interaction.user.voice.channel
+    if not interaction.guild.voice_client:
+        voice_client = await channel.connect()
+    else:
+        voice_client = interaction.guild.voice_client
 
-
-async def play_song(ctx, url):
-    """
-    Download and play a song in the voice channel.
-    """
-    global voice_client
-    if not voice_client or not voice_client.is_connected():
-        if ctx.author.voice:
-            voice_client = await ctx.author.voice.channel.connect()
-        else:
-            await ctx.send("You need to be in a voice channel to play music!")
+    # Search for the song
+    with youtube_dl.YoutubeDL(YDL_OPTIONS) as ydl:
+        try:
+            info = ydl.extract_info(search, download=False)
+            if 'entries' in info:
+                info = info['entries'][0]
+        except Exception as e:
+            await interaction.followup.send(f"❌ Could not retrieve video: {e}")
             return
 
-    ydl_opts = {
-        'format': 'bestaudio/best',
-        'outtmpl': os.path.join(DOWNLOAD_FOLDER, 'song.%(ext)s'),
-        'quiet': True,
-        'noplaylist': True
-    }
+    url = info['url']
+    title = info['title']
+    music_queue.append({'url': url, 'title': title})
 
-    try:
-        await ctx.send(f"Playing: {url}")
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=False)
-            audio_url = info['url']
+    await interaction.followup.send(f"✅ Added **{title}** to the queue.")
 
-        voice_client.play(discord.FFmpegPCMAudio(audio_url), after=lambda e: asyncio.run_coroutine_threadsafe(play_next_song(ctx), bot.loop))
-    except Exception as e:
-        await ctx.send(f"Error playing song: {e}")
-        print(e)
+    if not voice_client.is_playing():
+        await play_next(interaction.channel)
 
 
-# ========= Slash Commands =========
-
-@tree.command(name="play", description="Play a song by URL or name.")
-async def play(interaction: discord.Interaction, query: str):
-    await interaction.response.send_message("Adding song to queue...", ephemeral=True)
-
-    if "youtube.com" in query or "youtu.be" in query:
-        url = query
-    else:
-        url = fetch_audio_url_from_invidious(query)
-
-    if not url:
-        await interaction.followup.send("Could not find the song.")
-        return
-
-    queue.append(url)
-    await interaction.followup.send(f"Added to queue: {url}")
-
-    # If no song is currently playing, play the song
-    if current_track_index == -1:
-        ctx = await bot.get_context(interaction)
-        await play_next_song(ctx)
-
-
-@tree.command(name="skip", description="Skip to the next song.")
-async def skip(interaction: discord.Interaction):
-    global voice_client
-    if voice_client and voice_client.is_playing():
-        voice_client.stop()
-        await interaction.response.send_message("Skipped to the next song!")
-    else:
-        await interaction.response.send_message("No song is playing!")
-
-
-@tree.command(name="stop", description="Stop the music and clear the queue.")
-async def stop(interaction: discord.Interaction):
-    global voice_client, queue, current_track_index
-    if voice_client:
-        voice_client.stop()
-        await voice_client.disconnect()
-    queue.clear()
-    current_track_index = -1
-    await interaction.response.send_message("Stopped music and cleared the queue.")
-
-
-@tree.command(name="pause", description="Pause the current song.")
+# --- Command to Pause Music ---
+@bot.tree.command(name="pause", description="Pause the current song")
 async def pause(interaction: discord.Interaction):
-    global voice_client
     if voice_client and voice_client.is_playing():
         voice_client.pause()
-        await interaction.response.send_message("Paused the music.")
+        await interaction.response.send_message("⏸️ Paused the music.")
     else:
-        await interaction.response.send_message("No song is playing!")
+        await interaction.response.send_message("❌ No music is playing.")
 
 
-@tree.command(name="resume", description="Resume paused music.")
+# --- Command to Resume Music ---
+@bot.tree.command(name="resume", description="Resume the paused song")
 async def resume(interaction: discord.Interaction):
-    global voice_client
     if voice_client and voice_client.is_paused():
         voice_client.resume()
-        await interaction.response.send_message("Resumed the music.")
+        await interaction.response.send_message("▶️ Resumed the music.")
     else:
-        await interaction.response.send_message("No song is paused!")
+        await interaction.response.send_message("❌ No music is paused.")
 
 
-@tree.command(name="queue", description="Show the current queue.")
-async def show_queue(interaction: discord.Interaction):
-    if queue:
-        songs = "\n".join([f"{i+1}. {url}" for i, url in enumerate(queue)])
-        await interaction.response.send_message(f"Current Queue:\n{songs}")
+# --- Command to Stop Music ---
+@bot.tree.command(name="stop", description="Stop the music and clear the queue")
+async def stop(interaction: discord.Interaction):
+    global music_queue
+
+    if voice_client:
+        voice_client.stop()
+        music_queue = []
+        await interaction.response.send_message("⏹️ Stopped the music and cleared the queue.")
     else:
-        await interaction.response.send_message("The queue is empty.")
+        await interaction.response.send_message("❌ No music is playing.")
 
 
-# ========= Bot Events =========
+# --- Command to Skip Song ---
+@bot.tree.command(name="skip", description="Skip the current song")
+async def skip(interaction: discord.Interaction):
+    if voice_client and voice_client.is_playing():
+        voice_client.stop()
+        await interaction.response.send_message("⏭️ Skipped the current song.")
+    else:
+        await interaction.response.send_message("❌ No music is playing.")
 
+
+# --- Command to View Queue ---
+@bot.tree.command(name="queue", description="View the music queue")
+async def queue(interaction: discord.Interaction):
+    if music_queue:
+        queue_list = "\n".join([f"{i + 1}. {song['title']}" for i, song in enumerate(music_queue)])
+        await interaction.response.send_message(f"🎶 **Music Queue:**\n{queue_list}")
+    else:
+        await interaction.response.send_message("🎵 The music queue is empty.")
+
+
+# --- Event: On Ready ---
 @bot.event
 async def on_ready():
-    await tree.sync()
-    print(f"Logged in as {bot.user.name}")
+    await bot.tree.sync()  # Sync slash commands
+    print(f"✅ Logged in as {bot.user}")
 
 
-# ========= Run Bot ============
-if __name__ == "__main__":
-    if not os.path.exists(DOWNLOAD_FOLDER):
-        os.makedirs(DOWNLOAD_FOLDER)
-    bot.run(TOKEN)
+# Run the bot
+import os
+DISCORD_BOT_TOKEN = os.getenv("DISCORD_BOT_TOKEN")
+bot.run(DISCORD_BOT_TOKEN)
