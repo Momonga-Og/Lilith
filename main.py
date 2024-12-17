@@ -29,11 +29,11 @@ TEMP_FOLDER = "./temp_music/"
 # Ensure temporary folder exists
 os.makedirs(TEMP_FOLDER, exist_ok=True)
 
-# YouTube API configuration
-YOUTUBE_API_URL = "https://youtube-mp36.p.rapidapi.com/dl"
+# New YouTube API configuration
+YOUTUBE_API_URL = "https://youtube-mp310.p.rapidapi.com/download/mp3"
 HEADERS = {
     "x-rapidapi-key": "5e6976078bmsheb89f5f8d17f7d4p1b5895jsnb31e587ad8cc",
-    "x-rapidapi-host": "youtube-mp36.p.rapidapi.com"
+    "x-rapidapi-host": "youtube-mp310.p.rapidapi.com"
 }
 
 # --- Function to Re-encode MP3 using FFmpeg ---
@@ -103,12 +103,12 @@ async def play(interaction: discord.Interaction, url: str):
         voice_client = interaction.guild.voice_client
 
     try:
-        # Fetch audio download URL from YouTube API
-        video_id = url.split("v=")[-1]
-        querystring = {"id": video_id}
+        # Send the request to the new API with the provided URL
+        querystring = {"url": url}
         response = requests.get(YOUTUBE_API_URL, headers=HEADERS, params=querystring)
         data = response.json()
 
+        # Check if the API returned a valid audio URL
         if "link" not in data:
             await interaction.followup.send("❌ Could not fetch audio for this link.")
             return
