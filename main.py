@@ -20,7 +20,7 @@ voice_client = None
 FFMPEG_OPTIONS = {'options': '-vn'}
 
 # Path to your exported cookies file
-COOKIES_FILE = 'playlists.json'
+COOKIES_FILE = './playlists.json'
 
 # --- Function to Play Next Song ---
 async def play_next(ctx):
