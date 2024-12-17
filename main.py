@@ -19,6 +19,9 @@ voice_client = None
 # FFmpeg Options
 FFMPEG_OPTIONS = {'options': '-vn'}
 
+# Path to your exported cookies file
+COOKIES_FILE = 'path_to_your_cookies_file/cookies.json'
+
 # --- Function to Play Next Song ---
 async def play_next(ctx):
     global current_song, voice_client
@@ -57,8 +60,12 @@ async def play(interaction: discord.Interaction, url: str):
         voice_client = interaction.guild.voice_client
 
     try:
-        # Extract audio info using yt_dlp
-        with yt_dlp.YoutubeDL({'format': 'bestaudio'}) as ydl:
+        # Extract audio info using yt_dlp and pass cookies
+        ydl_opts = {
+            'format': 'bestaudio',
+            'cookies': COOKIES_FILE  # Use cookies for authentication
+        }
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=False)
             audio_url = info['url']
             title = info.get('title', 'Unknown Title')
