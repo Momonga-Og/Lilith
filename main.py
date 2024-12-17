@@ -78,7 +78,7 @@ async def play_next(ctx):
         logging.info(f"Now playing: {title}")
         await ctx.send(f"🎶 Now playing: **{title}**")
 
-        # Dubbing the bot's action
+        # Dubbing the bot's action (you need to add TTS functionality here)
         if voice_client:
             voice_client.play(discord.FFmpegPCMAudio("path_to_tts.mp3"))  # TTS path to say 'Now Playing'
 
@@ -124,36 +124,45 @@ async def play(interaction: discord.Interaction, url: str):
 
         # Check if the API returned a valid audio URL
         data = response.json()
-        if "link" not in data:
+        if "downloadUrl" not in data:
             logging.error(f"Could not fetch audio for the URL: {url}")
             await interaction.followup.send("❌ Could not fetch audio for this link.")
             return
 
-        audio_url = data["link"]
-        title = data["title"]
-        file_path = os.path.join(TEMP_FOLDER, f"{uuid.uuid4()}.mp3")
+        # Get the actual audio download URL from the response
+        download_url = data["downloadUrl"]
 
-        # Download the audio file
-        logging.info(f"Downloading audio from: {audio_url}")
-        with requests.get(audio_url, stream=True) as r:
+        # Now, fetch the audio file from the `downloadUrl`
+        logging.info(f"Fetching audio from {download_url}")
+        download_response = requests.get(download_url, stream=True)
+
+        # If the request was successful, proceed to download the audio
+        if download_response.status_code == 200:
+            title = data.get("title", "Unknown Title")
+            file_path = os.path.join(TEMP_FOLDER, f"{uuid.uuid4()}.mp3")
+
+            # Download the file
             with open(file_path, "wb") as f:
-                for chunk in r.iter_content(chunk_size=8192):
+                for chunk in download_response.iter_content(chunk_size=8192):
                     f.write(chunk)
-                logging.info(f"Downloaded file: {file_path}")
+            logging.info(f"Downloaded file: {file_path}")
 
-        # Ensure the file size is reasonable before proceeding
-        if check_file_size(file_path) < 1024 * 1024:
-            logging.warning(f"File for {title} is too small to be a valid audio file.")
-            await interaction.followup.send(f"❌ The file for **{title}** is too small to be a valid audio file.")
-            os.remove(file_path)
-            return
+            # Ensure the file size is reasonable before proceeding
+            if check_file_size(file_path) < 1024 * 1024:
+                logging.warning(f"File for {title} is too small to be a valid audio file.")
+                await interaction.followup.send(f"❌ The file for **{title}** is too small to be a valid audio file.")
+                os.remove(file_path)
+                return
 
-        # Add to queue and play
-        music_queue.append({"file_path": file_path, "title": title})
-        await interaction.followup.send(f"✅ Added **{title}** to the queue.")
+            # Add to queue and play
+            music_queue.append({"file_path": file_path, "title": title})
+            await interaction.followup.send(f"✅ Added **{title}** to the queue.")
 
-        if not pygame.mixer.music.get_busy():
-            await play_next(interaction.channel)
+            if not pygame.mixer.music.get_busy():
+                await play_next(interaction.channel)
+        else:
+            logging.error(f"Failed to download audio from {download_url}")
+            await interaction.followup.send("❌ Could not download audio. Please try again later.")
 
     except Exception as e:
         logging.error(f"Error occurred: {e}")
