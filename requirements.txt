@@ -3,3 +3,4 @@ discord.py
 yt-dlp
 python-dotenv
 requests
+pygame
