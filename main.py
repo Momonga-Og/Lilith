@@ -3,22 +3,18 @@ from discord.ext import commands
 from discord import app_commands
 import asyncio
 import os
-from soundcloud import Client
+import yt_dlp
 
 # Bot setup
 intents = discord.Intents.default()
 intents.message_content = True
 intents.voice_states = True
-
 bot = commands.Bot(command_prefix="/", intents=intents)
 
 # Global Variables for Music Queue and Player
 music_queue = []
 current_song = None
 voice_client = None
-
-# SoundCloud API
-SC_CLIENT = SoundcloudDL()
 
 # FFmpeg Options
 FFMPEG_OPTIONS = {'options': '-vn'}
@@ -42,9 +38,9 @@ async def play_next(ctx):
         await ctx.send("🎵 Queue is empty. Add more songs!")
 
 # --- Command to Play Music ---
-@bot.tree.command(name="play", description="Play a song from SoundCloud")
-@app_commands.describe(search="SoundCloud track URL")
-async def play(interaction: discord.Interaction, search: str):
+@bot.tree.command(name="play", description="Play a song from a URL")
+@app_commands.describe(url="Song URL from YouTube or SoundCloud")
+async def play(interaction: discord.Interaction, url: str):
     global voice_client
 
     await interaction.response.defer()  # Defer response to prevent timeout
@@ -61,17 +57,14 @@ async def play(interaction: discord.Interaction, search: str):
         voice_client = interaction.guild.voice_client
 
     try:
-        # Get SoundCloud track details
-        track = await SC_CLIENT.get_track(search)
-        if not track:
-            await interaction.followup.send("❌ No track found.")
-            return
+        # Extract audio info using yt_dlp
+        with yt_dlp.YoutubeDL({'format': 'bestaudio'}) as ydl:
+            info = ydl.extract_info(url, download=False)
+            audio_url = info['url']
+            title = info.get('title', 'Unknown Title')
 
         # Add track to queue
-        title = track["title"]
-        url = track["url"]
-        music_queue.append({'url': url, 'title': title})
-
+        music_queue.append({'url': audio_url, 'title': title})
         await interaction.followup.send(f"✅ Added **{title}** to the queue.")
 
         # Play if nothing is playing
@@ -80,24 +73,6 @@ async def play(interaction: discord.Interaction, search: str):
 
     except Exception as e:
         await interaction.followup.send(f"❌ Error: {e}")
-
-# --- Command to Pause Music ---
-@bot.tree.command(name="pause", description="Pause the current song")
-async def pause(interaction: discord.Interaction):
-    if voice_client and voice_client.is_playing():
-        voice_client.pause()
-        await interaction.response.send_message("⏸️ Paused the music.")
-    else:
-        await interaction.response.send_message("❌ No music is playing.")
-
-# --- Command to Resume Music ---
-@bot.tree.command(name="resume", description="Resume the paused song")
-async def resume(interaction: discord.Interaction):
-    if voice_client and voice_client.is_paused():
-        voice_client.resume()
-        await interaction.response.send_message("▶️ Resumed the music.")
-    else:
-        await interaction.response.send_message("❌ No music is paused.")
 
 # --- Command to Stop Music ---
 @bot.tree.command(name="stop", description="Stop the music and clear the queue")
@@ -120,19 +95,28 @@ async def skip(interaction: discord.Interaction):
     else:
         await interaction.response.send_message("❌ No music is playing.")
 
-# --- Command to View Queue ---
-@bot.tree.command(name="queue", description="View the music queue")
-async def queue(interaction: discord.Interaction):
-    if music_queue:
-        queue_list = "\n".join([f"{i + 1}. {song['title']}" for i, song in enumerate(music_queue)])
-        await interaction.response.send_message(f"🎶 **Music Queue:**\n{queue_list}")
+# --- Command to Pause Music ---
+@bot.tree.command(name="pause", description="Pause the current song")
+async def pause(interaction: discord.Interaction):
+    if voice_client and voice_client.is_playing():
+        voice_client.pause()
+        await interaction.response.send_message("⏸️ Paused the music.")
     else:
-        await interaction.response.send_message("🎵 The music queue is empty.")
+        await interaction.response.send_message("❌ No music is playing.")
+
+# --- Command to Resume Music ---
+@bot.tree.command(name="resume", description="Resume the paused song")
+async def resume(interaction: discord.Interaction):
+    if voice_client and voice_client.is_paused():
+        voice_client.resume()
+        await interaction.response.send_message("▶️ Resumed the music.")
+    else:
+        await interaction.response.send_message("❌ No music is paused.")
 
 # --- Event: On Ready ---
 @bot.event
 async def on_ready():
-    await bot.tree.sync()  # Sync slash commands
+    await bot.tree.sync()
     print(f"✅ Logged in as {bot.user}")
 
 # Run the bot
