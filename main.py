@@ -7,6 +7,10 @@ import os
 import uuid
 import subprocess
 import pygame
+import logging
+
+# Set up logging to log every step the bot does
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 # Use a dummy audio driver for headless environments
 os.environ["SDL_AUDIODRIVER"] = "dummy"
@@ -38,6 +42,7 @@ HEADERS = {
 
 # --- Function to Re-encode MP3 using FFmpeg ---
 def reencode_mp3(input_path, output_path):
+    logging.info(f"Re-encoding file {input_path} to {output_path}")
     subprocess.run(["ffmpeg", "-i", input_path, "-codec:a", "libmp3lame", "-qscale:a", "2", output_path])
 
 # --- Function to Check Downloaded File Size ---
@@ -57,6 +62,7 @@ async def play_next(ctx):
 
         # Check if the file size is reasonable (for example, it should be > 1MB)
         if check_file_size(file_path) < 1024 * 1024:
+            logging.warning(f"File is too small to be a valid audio file: {title}")
             await ctx.send(f"❌ The file is too small to be a valid audio file: **{title}**")
             os.remove(file_path)
             return
@@ -69,7 +75,12 @@ async def play_next(ctx):
         pygame.mixer.music.load(reencoded_file)
         pygame.mixer.music.play()
 
+        logging.info(f"Now playing: {title}")
         await ctx.send(f"🎶 Now playing: **{title}**")
+
+        # Dubbing the bot's action
+        if voice_client:
+            voice_client.play(discord.FFmpegPCMAudio("path_to_tts.mp3"))  # TTS path to say 'Now Playing'
 
         # Wait for the music to finish
         while pygame.mixer.music.get_busy():
@@ -81,6 +92,7 @@ async def play_next(ctx):
         await play_next(ctx)
     else:
         current_song = None
+        logging.info("Queue is empty.")
         await ctx.send("🎵 Queue is empty. Add more songs!")
 
 # --- Command to Play Music ---
@@ -108,11 +120,12 @@ async def play(interaction: discord.Interaction, url: str):
         response = requests.get(YOUTUBE_API_URL, headers=HEADERS, params=querystring)
 
         # Print the raw response for debugging purposes
-        print(f"API Response: {response.json()}")  # Debugging line
+        logging.info(f"API Response: {response.json()}")  # Debugging line
 
         # Check if the API returned a valid audio URL
         data = response.json()
         if "link" not in data:
+            logging.error(f"Could not fetch audio for the URL: {url}")
             await interaction.followup.send("❌ Could not fetch audio for this link.")
             return
 
@@ -121,13 +134,16 @@ async def play(interaction: discord.Interaction, url: str):
         file_path = os.path.join(TEMP_FOLDER, f"{uuid.uuid4()}.mp3")
 
         # Download the audio file
+        logging.info(f"Downloading audio from: {audio_url}")
         with requests.get(audio_url, stream=True) as r:
             with open(file_path, "wb") as f:
                 for chunk in r.iter_content(chunk_size=8192):
                     f.write(chunk)
+                logging.info(f"Downloaded file: {file_path}")
 
         # Ensure the file size is reasonable before proceeding
         if check_file_size(file_path) < 1024 * 1024:
+            logging.warning(f"File for {title} is too small to be a valid audio file.")
             await interaction.followup.send(f"❌ The file for **{title}** is too small to be a valid audio file.")
             os.remove(file_path)
             return
@@ -140,6 +156,7 @@ async def play(interaction: discord.Interaction, url: str):
             await play_next(interaction.channel)
 
     except Exception as e:
+        logging.error(f"Error occurred: {e}")
         await interaction.followup.send(f"❌ Error: {e}")
 
 # --- Command to Stop Music ---
@@ -149,6 +166,7 @@ async def stop(interaction: discord.Interaction):
 
     pygame.mixer.music.stop()
     music_queue = []
+    logging.info("Stopped the music and cleared the queue.")
     await interaction.response.send_message("⏹️ Stopped the music and cleared the queue.")
 
 # --- Command to Skip Song ---
@@ -156,8 +174,10 @@ async def stop(interaction: discord.Interaction):
 async def skip(interaction: discord.Interaction):
     if pygame.mixer.music.get_busy():
         pygame.mixer.music.stop()
+        logging.info("Skipped the current song.")
         await interaction.response.send_message("⏭️ Skipped the current song.")
     else:
+        logging.warning("No music is playing.")
         await interaction.response.send_message("❌ No music is playing.")
 
 # --- Command to Pause Music ---
@@ -165,8 +185,10 @@ async def skip(interaction: discord.Interaction):
 async def pause(interaction: discord.Interaction):
     if pygame.mixer.music.get_busy():
         pygame.mixer.music.pause()
+        logging.info("Paused the current song.")
         await interaction.response.send_message("⏸️ Paused the music.")
     else:
+        logging.warning("No music is playing.")
         await interaction.response.send_message("❌ No music is playing.")
 
 # --- Command to Resume Music ---
@@ -174,15 +196,17 @@ async def pause(interaction: discord.Interaction):
 async def resume(interaction: discord.Interaction):
     if pygame.mixer.music.get_pos() != -1:
         pygame.mixer.music.unpause()
+        logging.info("Resumed the music.")
         await interaction.response.send_message("▶️ Resumed the music.")
     else:
+        logging.warning("No music is paused.")
         await interaction.response.send_message("❌ No music is paused.")
 
 # --- Event: On Ready ---
 @bot.event
 async def on_ready():
     await bot.tree.sync()
-    print(f"✅ Logged in as {bot.user}")
+    logging.info(f"Logged in as {bot.user}")
 
 # Run the bot
 DISCORD_BOT_TOKEN = os.getenv("DISCORD_BOT_TOKEN")
