@@ -6,9 +6,7 @@ import requests
 import os
 import uuid
 import subprocess
-import pygame
 import logging
-from time import time
 
 # Set up logging to log every step the bot does
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -21,9 +19,6 @@ intents = discord.Intents.default()
 intents.message_content = True
 intents.voice_states = True
 bot = commands.Bot(command_prefix="/", intents=intents)
-
-# Initialize Pygame Mixer
-pygame.mixer.init()
 
 # Global Variables for Music
 music_queue = []
@@ -38,7 +33,8 @@ os.makedirs(TEMP_FOLDER, exist_ok=True)
 YOUTUBE_API_URL = "https://youtube-mp36.p.rapidapi.com/dl"
 HEADERS = {
     "x-rapidapi-key": "5e6976078bmsheb89f5f8d17f7d4p1b5895jsnb31e587ad8cc",
-    "x-rapidapi-host": "youtube-mp36.p.rapidapi.com"
+    "x-rapidapi-host": "youtube-mp36.p.rapidapi.com",
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
 }
 
 # --- Function to Re-encode MP3 using FFmpeg ---
@@ -50,13 +46,13 @@ def reencode_mp3(input_path, output_path):
 def check_file_size(file_path):
     return os.path.getsize(file_path)
 
-# --- Function to Download the File ---
+# --- Function to Download File with Redirects Handling ---
 def download_file(url, file_path, retries=3):
     try:
         # Attempt to download the file with retries
         for attempt in range(retries):
             logging.info(f"Downloading file from {url}, attempt {attempt + 1}")
-            response = requests.get(url, stream=True, timeout=30)
+            response = requests.get(url, stream=True, timeout=30, headers={"User-Agent": "Mozilla/5.0"})
             if response.status_code == 200:
                 with open(file_path, "wb") as f:
                     for chunk in response.iter_content(chunk_size=8192):
@@ -94,15 +90,14 @@ async def play_next(ctx):
         reencoded_file = file_path.replace(".mp3", "_reencoded.mp3")
         reencode_mp3(file_path, reencoded_file)
 
-        # Play using pygame
-        pygame.mixer.music.load(reencoded_file)
-        pygame.mixer.music.play()
+        # Play using discord.FFmpegPCMAudio (instead of pygame)
+        voice_client.play(discord.FFmpegPCMAudio(reencoded_file), after=lambda e: asyncio.run_coroutine_threadsafe(play_next(ctx), bot.loop))
 
         logging.info(f"Now playing: {title}")
         await ctx.send(f"🎶 Now playing: **{title}**")
 
         # Wait for the music to finish
-        while pygame.mixer.music.get_busy():
+        while voice_client.is_playing():
             await asyncio.sleep(1)
 
         # Cleanup and play next
@@ -172,7 +167,7 @@ async def play(interaction: discord.Interaction, url: str):
         music_queue.append({"file_path": file_path, "title": title})
         await interaction.followup.send(f"✅ Added **{title}** to the queue.")
 
-        if not pygame.mixer.music.get_busy():
+        if not voice_client.is_playing():
             await play_next(interaction.channel)
 
     except Exception as e:
@@ -184,7 +179,7 @@ async def play(interaction: discord.Interaction, url: str):
 async def stop(interaction: discord.Interaction):
     global music_queue
 
-    pygame.mixer.music.stop()
+    voice_client.stop()
     music_queue = []
     logging.info("Stopped the music and cleared the queue.")
     await interaction.response.send_message("⏹️ Stopped the music and cleared the queue.")
@@ -192,8 +187,8 @@ async def stop(interaction: discord.Interaction):
 # --- Command to Skip Song ---
 @bot.tree.command(name="skip", description="Skip the current song")
 async def skip(interaction: discord.Interaction):
-    if pygame.mixer.music.get_busy():
-        pygame.mixer.music.stop()
+    if voice_client.is_playing():
+        voice_client.stop()
         logging.info("Skipped the current song.")
         await interaction.response.send_message("⏭️ Skipped the current song.")
     else:
@@ -203,8 +198,8 @@ async def skip(interaction: discord.Interaction):
 # --- Command to Pause Music ---
 @bot.tree.command(name="pause", description="Pause the current song")
 async def pause(interaction: discord.Interaction):
-    if pygame.mixer.music.get_busy():
-        pygame.mixer.music.pause()
+    if voice_client.is_playing():
+        voice_client.pause()
         logging.info("Paused the current song.")
         await interaction.response.send_message("⏸️ Paused the music.")
     else:
@@ -214,8 +209,8 @@ async def pause(interaction: discord.Interaction):
 # --- Command to Resume Music ---
 @bot.tree.command(name="resume", description="Resume the paused song")
 async def resume(interaction: discord.Interaction):
-    if pygame.mixer.music.get_pos() != -1:
-        pygame.mixer.music.unpause()
+    if voice_client.is_paused():
+        voice_client.resume()
         logging.info("Resumed the music.")
         await interaction.response.send_message("▶️ Resumed the music.")
     else:
