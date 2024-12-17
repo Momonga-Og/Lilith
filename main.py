@@ -3,16 +3,11 @@ from discord.ext import commands
 from discord import app_commands
 import asyncio
 import requests
-import os
-import uuid
-import subprocess
 import logging
+import uuid
 
 # Set up logging to log every step the bot does
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-
-# Use a dummy audio driver for headless environments
-os.environ["SDL_AUDIODRIVER"] = "dummy"
 
 # Bot setup
 intents = discord.Intents.default()
@@ -37,36 +32,23 @@ HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
 }
 
-# --- Function to Re-encode MP3 using FFmpeg ---
-def reencode_mp3(input_path, output_path):
-    logging.info(f"Re-encoding file {input_path} to {output_path}")
-    subprocess.run(["ffmpeg", "-i", input_path, "-codec:a", "libmp3lame", "-qscale:a", "2", output_path])
+# --- Function to Stream Music from URL ---
+async def stream_music_from_url(url, ctx):
+    global voice_client
 
-# --- Function to Check Downloaded File Size ---
-def check_file_size(file_path):
-    return os.path.getsize(file_path)
+    if not voice_client:
+        await ctx.author.voice.channel.connect()
 
-# --- Function to Download File with Redirects Handling ---
-def download_file(url, file_path, retries=3):
     try:
-        # Attempt to download the file with retries
-        for attempt in range(retries):
-            logging.info(f"Downloading file from {url}, attempt {attempt + 1}")
-            response = requests.get(url, stream=True, timeout=30, headers={"User-Agent": "Mozilla/5.0"})
-            if response.status_code == 200:
-                with open(file_path, "wb") as f:
-                    for chunk in response.iter_content(chunk_size=8192):
-                        f.write(chunk)
-                logging.info(f"Successfully downloaded file: {file_path}")
-                return True
-            else:
-                logging.error(f"Failed to download. Status code: {response.status_code}")
-            if attempt < retries - 1:
-                logging.info("Retrying download...")
-        return False
-    except requests.RequestException as e:
-        logging.error(f"Error downloading the file: {e}")
-        return False
+        # Stream the audio directly from the URL using FFmpegPCMAudio
+        voice_client.play(
+            discord.FFmpegPCMAudio(url, **{'before_options': '-re'}),
+            after=lambda e: asyncio.run_coroutine_threadsafe(play_next(ctx), bot.loop)
+        )
+        await ctx.send(f"🎶 Now playing: **{url}**")
+    except Exception as e:
+        logging.error(f"Error occurred while streaming audio: {e}")
+        await ctx.send("❌ There was an error while streaming the audio.")
 
 # --- Function to Play Next Song ---
 async def play_next(ctx):
@@ -76,34 +58,11 @@ async def play_next(ctx):
         next_song = music_queue.pop(0)
         current_song = next_song
 
-        file_path = next_song["file_path"]
+        file_url = next_song["file_url"]
         title = next_song["title"]
 
-        # Check if the file size is reasonable (for example, it should be > 1MB)
-        if check_file_size(file_path) < 1024 * 1024:
-            logging.warning(f"File is too small to be a valid audio file: {title}")
-            await ctx.send(f"❌ The file is too small to be a valid audio file: **{title}**")
-            os.remove(file_path)
-            return
-
-        # Re-encode the file to ensure compatibility
-        reencoded_file = file_path.replace(".mp3", "_reencoded.mp3")
-        reencode_mp3(file_path, reencoded_file)
-
-        # Play using discord.FFmpegPCMAudio (instead of pygame)
-        voice_client.play(discord.FFmpegPCMAudio(reencoded_file), after=lambda e: asyncio.run_coroutine_threadsafe(play_next(ctx), bot.loop))
-
-        logging.info(f"Now playing: {title}")
-        await ctx.send(f"🎶 Now playing: **{title}**")
-
-        # Wait for the music to finish
-        while voice_client.is_playing():
-            await asyncio.sleep(1)
-
-        # Cleanup and play next
-        os.remove(reencoded_file)  # Remove the re-encoded file
-        os.remove(file_path)  # Remove the original file
-        await play_next(ctx)
+        # Stream the song from the URL directly
+        await stream_music_from_url(file_url, ctx)
     else:
         current_song = None
         logging.info("Queue is empty.")
@@ -147,25 +106,10 @@ async def play(interaction: discord.Interaction, url: str):
         audio_url = data["link"]
 
         logging.info(f"Fetching audio from: {audio_url}")
-        file_path = os.path.join(TEMP_FOLDER, f"{uuid.uuid4()}.mp3")
 
-        # Download the file
-        if not download_file(audio_url, file_path):
-            await interaction.followup.send("❌ Failed to download the audio file.")
-            return
-
-        title = data.get("title", "Unknown Title")
-
-        # Ensure the file size is reasonable before proceeding
-        if check_file_size(file_path) < 1024 * 1024:
-            logging.warning(f"File for {title} is too small to be a valid audio file.")
-            await interaction.followup.send(f"❌ The file for **{title}** is too small to be a valid audio file.")
-            os.remove(file_path)
-            return
-
-        # Add to queue and play
-        music_queue.append({"file_path": file_path, "title": title})
-        await interaction.followup.send(f"✅ Added **{title}** to the queue.")
+        # Add to queue and stream directly
+        music_queue.append({"file_url": audio_url, "title": data.get("title", "Unknown Title")})
+        await interaction.followup.send(f"✅ Added **{data['title']}** to the queue.")
 
         if not voice_client.is_playing():
             await play_next(interaction.channel)
@@ -179,7 +123,8 @@ async def play(interaction: discord.Interaction, url: str):
 async def stop(interaction: discord.Interaction):
     global music_queue
 
-    voice_client.stop()
+    if voice_client.is_playing():
+        voice_client.stop()
     music_queue = []
     logging.info("Stopped the music and cleared the queue.")
     await interaction.response.send_message("⏹️ Stopped the music and cleared the queue.")
