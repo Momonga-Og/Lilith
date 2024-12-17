@@ -5,12 +5,20 @@ import asyncio
 import requests
 import os
 import uuid
+import subprocess
+import pygame
+
+# Use a dummy audio driver for headless environments
+os.environ["SDL_AUDIODRIVER"] = "dummy"
 
 # Bot setup
 intents = discord.Intents.default()
 intents.message_content = True
 intents.voice_states = True
 bot = commands.Bot(command_prefix="/", intents=intents)
+
+# Initialize Pygame Mixer
+pygame.mixer.init()
 
 # Global Variables for Music
 music_queue = []
@@ -28,6 +36,10 @@ HEADERS = {
     "x-rapidapi-host": "youtube-mp36.p.rapidapi.com"
 }
 
+# --- Function to Re-encode MP3 using FFmpeg ---
+def reencode_mp3(input_path, output_path):
+    subprocess.run(["ffmpeg", "-i", input_path, "-codec:a", "libmp3lame", "-qscale:a", "2", output_path])
+
 # --- Function to Play Next Song ---
 async def play_next(ctx):
     global current_song, voice_client
@@ -39,18 +51,23 @@ async def play_next(ctx):
         file_path = next_song["file_path"]
         title = next_song["title"]
 
-        # Play using FFmpegPCMAudio
-        source = discord.FFmpegPCMAudio(file_path)
-        voice_client.play(source)
+        # Re-encode the file to ensure compatibility
+        reencoded_file = file_path.replace(".mp3", "_reencoded.mp3")
+        reencode_mp3(file_path, reencoded_file)
+
+        # Play using pygame
+        pygame.mixer.music.load(reencoded_file)
+        pygame.mixer.music.play()
 
         await ctx.send(f"🎶 Now playing: **{title}**")
 
         # Wait for the music to finish
-        while voice_client.is_playing():
+        while pygame.mixer.music.get_busy():
             await asyncio.sleep(1)
 
         # Cleanup and play next
-        os.remove(file_path)
+        os.remove(reencoded_file)  # Remove the re-encoded file
+        os.remove(file_path)  # Remove the original file
         await play_next(ctx)
     else:
         current_song = None
@@ -100,7 +117,7 @@ async def play(interaction: discord.Interaction, url: str):
         music_queue.append({"file_path": file_path, "title": title})
         await interaction.followup.send(f"✅ Added **{title}** to the queue.")
 
-        if not voice_client.is_playing():
+        if not pygame.mixer.music.get_busy():
             await play_next(interaction.channel)
 
     except Exception as e:
@@ -111,15 +128,15 @@ async def play(interaction: discord.Interaction, url: str):
 async def stop(interaction: discord.Interaction):
     global music_queue
 
-    voice_client.stop()
+    pygame.mixer.music.stop()
     music_queue = []
     await interaction.response.send_message("⏹️ Stopped the music and cleared the queue.")
 
 # --- Command to Skip Song ---
 @bot.tree.command(name="skip", description="Skip the current song")
 async def skip(interaction: discord.Interaction):
-    if voice_client and voice_client.is_playing():
-        voice_client.stop()
+    if pygame.mixer.music.get_busy():
+        pygame.mixer.music.stop()
         await interaction.response.send_message("⏭️ Skipped the current song.")
     else:
         await interaction.response.send_message("❌ No music is playing.")
@@ -127,8 +144,8 @@ async def skip(interaction: discord.Interaction):
 # --- Command to Pause Music ---
 @bot.tree.command(name="pause", description="Pause the current song")
 async def pause(interaction: discord.Interaction):
-    if voice_client and voice_client.is_playing():
-        voice_client.pause()
+    if pygame.mixer.music.get_busy():
+        pygame.mixer.music.pause()
         await interaction.response.send_message("⏸️ Paused the music.")
     else:
         await interaction.response.send_message("❌ No music is playing.")
@@ -136,8 +153,8 @@ async def pause(interaction: discord.Interaction):
 # --- Command to Resume Music ---
 @bot.tree.command(name="resume", description="Resume the paused song")
 async def resume(interaction: discord.Interaction):
-    if voice_client and voice_client.is_paused():
-        voice_client.resume()
+    if pygame.mixer.music.get_pos() != -1:
+        pygame.mixer.music.unpause()
         await interaction.response.send_message("▶️ Resumed the music.")
     else:
         await interaction.response.send_message("❌ No music is paused.")
