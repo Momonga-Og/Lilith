@@ -7,6 +7,9 @@ import requests
 import os
 import uuid
 
+# Use a dummy audio driver for headless environments
+os.environ["SDL_AUDIODRIVER"] = "dummy"
+
 # Bot setup
 intents = discord.Intents.default()
 intents.message_content = True
@@ -32,7 +35,7 @@ HEADERS = {
     "x-rapidapi-host": "youtube-mp36.p.rapidapi.com"
 }
 
-# --- Function to Download and Play Next Song ---
+# --- Function to Play Next Song ---
 async def play_next(ctx):
     global current_song, voice_client
 
